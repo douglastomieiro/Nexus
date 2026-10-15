@@ -6,6 +6,7 @@ import { app, BrowserWindow, Menu, dialog, session, shell } from 'electron';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { iniciarAtualizacoes, verificar } from './atualizacao.js';
 
 if (!app.requestSingleInstanceLock()) app.quit(); // uma janela só: o banco não pode ter dois servidores
 
@@ -44,6 +45,8 @@ function menu() {
       { label: 'Abrir pasta de dados (.env, banco, backups)', click: () => shell.openPath(DADOS) },
       { label: 'Abrir registro de erros (app.log)', click: () => shell.openPath(LOG) },
       { type: 'separator' },
+      { label: `Verificar atualizações (versão ${app.getVersion()})`, click: () => verificar(true) },
+      { type: 'separator' },
       { role: 'quit', label: 'Sair' },
     ] },
     { label: 'Exibir', submenu: [
@@ -74,6 +77,7 @@ app.whenReady().then(async () => {
     janela.webContents.on('will-navigate', (e, u) => { if (!u.startsWith(url)) { e.preventDefault(); externo(u); } });
     janela.once('ready-to-show', () => janela.show());
     await janela.loadURL(url);
+    iniciarAtualizacoes(() => janela);
   } catch (e) {
     dialog.showErrorBox('ML Dashboard não iniciou', String(e?.stack || e));
     app.quit();

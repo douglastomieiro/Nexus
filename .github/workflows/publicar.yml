@@ -1,0 +1,47 @@
+# Publica uma versão: ao enviar uma tag "v<versão>" (ex.: v0.2.0), gera o instalador do Windows e cria um RASCUNHO de release
+# no GitHub com o .exe e o latest.yml (que o app consulta para se atualizar). O rascunho só vale depois de clicar em "Publish".
+#
+# Configuração única: Settings → Secrets and variables → Actions → aba Variables → New repository variable
+#   BROKER_URL = endereço do intermediário de login (ex.: https://<worker>.<subdominio>.workers.dev)
+name: Publicar versão
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # criar a release e enviar os arquivos
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Conferir versão (tag = package.json)
+        shell: bash
+        run: |
+          v=$(node -p "require('./package.json').version")
+          [ "v$v" = "$GITHUB_REF_NAME" ] || { echo "A tag $GITHUB_REF_NAME não bate com a versão do package.json ($v)."; exit 1; }
+
+      - run: npm ci
+
+      - name: Endereço do intermediário (app-config.json)
+        shell: bash
+        env:
+          BROKER: ${{ vars.BROKER_URL }}
+        run: |
+          [ -n "$BROKER" ] || { echo "Defina a variável BROKER_URL (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
+          printf '{\n  "broker": "%s"\n}\n' "$BROKER" > app-config.json
+
+      - run: npm test
+
+      - name: Gerar instalador e enviar para a release (rascunho)
+        run: npx electron-builder --win nsis --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

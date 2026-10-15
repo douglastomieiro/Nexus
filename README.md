@@ -6,13 +6,15 @@ Painel gratuito e de código aberto para vendedores do Mercado Livre e da Shopee
 - **Sem cadastro e sem mensalidade.** O único serviço do projeto na internet é o **intermediário de login** (veja abaixo), que não guarda nada. Licença MIT (veja `LICENSE`).
 
 ## Instalação (app para Windows)
-1. Baixe e rode o instalador `ML Dashboard Setup <versão>.exe`. Sem assinatura digital, o Windows mostra "Windows protegeu o computador": clique em **Mais informações → Executar assim mesmo**.
+1. Baixe o instalador `ML Dashboard Setup <versão>.exe` na página [Releases](https://github.com/douglastomieiro/ydata/releases/latest) e rode. Sem assinatura digital, o Windows mostra "Windows protegeu o computador": clique em **Mais informações → Executar assim mesmo**.
 2. Abra o **ML Dashboard**. Na primeira vez ele abre a tela **Contas**.
-3. Clique em **Conectar conta do Mercado Livre**, entre na conta no navegador e clique em **Autorizar**. Volte ao app e clique em **Reiniciar agora**.
+3. Clique em **Copiar link de autorização**, cole no navegador em que a conta do Mercado Livre está logada e clique em **Autorizar**. Para cada loja, repita no navegador (ou perfil) da conta correspondente. Volte ao app e clique em **Reiniciar agora**.
 4. A primeira carga busca 12 meses de pedidos (algumas dezenas de minutos; o painel já funciona durante a carga).
 5. Em **Configurações**, informe a alíquota do Simples de cada conta e, em **Custos**, o custo de cada SKU.
 
 Os dados ficam em `%APPDATA%\ML Dashboard` (menu Arquivo → "Abrir pasta de dados").
+
+**Atualizações:** o app procura versão nova ao abrir e a cada 6 horas (e no menu Arquivo → "Verificar atualizações"). Baixa em segundo plano, confere a integridade do arquivo e pergunta se quer reiniciar; se não, instala ao fechar. Contas e dados continuam.
 
 **Segurança do app:** o servidor interno só escuta em `127.0.0.1`, numa porta sorteada a cada abertura, e exige uma chave criada a cada abertura que só a janela do app conhece (outros programas e sites recebem 403). Os tokens das contas ficam cifrados com o cofre do Windows.
 
@@ -28,6 +30,20 @@ O Mercado Livre exige a senha do aplicativo (`client_secret`) para trocar a auto
 2. Em `broker/wrangler.toml`, preencha `ML_CLIENT_ID`. Grave a senha como secret: `npx wrangler secret put ML_CLIENT_SECRET`.
 3. Publique: `npx wrangler deploy` (dentro de `broker/`).
 4. Copie `app-config.example.json` para `app-config.json` (fica fora do git), coloque o endereço do Worker e gere o instalador (`npm run dist`). Para testar sem recompilar: `ML_DASH_BROKER=https://...` no `.env` da pasta de dados.
+
+### Publicar uma versão (atualiza todo mundo)
+O GitHub Actions (`.github/workflows/publicar.yml`) gera o instalador e cria a release quando recebe uma tag `v<versão>`.
+
+**Uma vez só:** no GitHub, *Settings → Secrets and variables → Actions → Variables → New repository variable*: `BROKER_URL` = endereço do intermediário.
+
+**A cada versão:**
+1. `npm run versao -- patch` (correção: 0.2.0 → 0.2.1) ou `-- minor` (novidade: 0.2.0 → 0.3.0). Isso só muda o `package.json`.
+2. `git commit -am "Versão 0.2.1"` e `git tag v0.2.1`.
+3. `git push --follow-tags`.
+4. Aguarde o Actions terminar (aba *Actions*, uns 5–10 min). Ele cria um **rascunho** em *Releases* com o `.exe` e o `latest.yml`.
+5. Abra o rascunho, escreva o que mudou e clique em **Publish release**. A partir daí os apps instalados se atualizam sozinhos.
+
+Para gerar só o instalador no seu PC, sem publicar: `npm run dist` (sai em `dist/<versão>/`).
 
 ## Modo avançado (.env)
 Opcional, na pasta de dados (ou na pasta do projeto rodando com `node start.js`, que exige Node 22+):
