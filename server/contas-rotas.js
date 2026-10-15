@@ -7,7 +7,7 @@ const pagina = (titulo, texto, ok) => `<!doctype html><html lang="pt-BR"><meta c
 <title>${esc(titulo)}</title><body style="font-family:system-ui,sans-serif;background:#f6f7f9;color:#1f2937;display:grid;place-items:center;min-height:100vh;margin:0">
 <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:32px 40px;max-width:460px;text-align:center">
 <div style="font-size:40px">${ok ? '✅' : '⚠️'}</div><h2 style="margin:8px 0">${esc(titulo)}</h2><p style="color:#4b5563">${esc(texto)}</p>
-<p style="color:#6b7280;font-size:14px">Pode fechar esta aba e voltar ao NEXUS_.</p></div></body></html>`;
+<p style="color:#6b7280;font-size:14px">Pode fechar esta aba e voltar ao Nexus.</p></div></body></html>`;
 
 // Contas do arquivo de lista que ainda não estão no servidor em execução (ou o contrário) → precisa reiniciar para coletar.
 function precisaReiniciar() {
@@ -42,8 +42,8 @@ export function registrarContas(app) {
       console.log(`[contas] conta ${c.nova ? 'conectada' : 'já conectada (acesso renovado)'}: loja${c.n}`);
       ultimo = { quando: Date.now(), nova: c.nova, nome: c.nome, nickname: c.nickname };
       res.send(c.nova
-        ? pagina('Conta conectada!', `${c.nome || c.nickname}: o NEXUS_ já pode ler os dados desta conta.`, true)
-        : pagina('Esta conta já estava conectada', `"${c.nickname || c.nome}" já está no NEXUS_ (o acesso foi renovado). Para adicionar outra loja, cole o link no navegador em que a OUTRA conta está logada.`, true));
+        ? pagina('Conta conectada!', `${c.nome || c.nickname}: o Nexus já pode ler os dados desta conta.`, true)
+        : pagina('Esta conta já estava conectada', `"${c.nickname || c.nome}" já está no Nexus (o acesso foi renovado). Para adicionar outra loja, cole o link no navegador em que a OUTRA conta está logada.`, true));
     } catch (e) {
       console.error('[contas] falha ao concluir a conexão:', e.message);
       ultimo = { quando: Date.now(), erro: e.message };

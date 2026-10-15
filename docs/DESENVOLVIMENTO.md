@@ -1,4 +1,4 @@
-# NEXUS_ — documentação técnica
+# Nexus — documentação técnica
 
 Para quem distribui, mantém ou quer entender o código. Para usar o app, veja o [README](../README.md).
 

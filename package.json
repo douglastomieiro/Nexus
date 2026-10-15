@@ -1,9 +1,9 @@
 {
   "name": "ml-dashboard",
-  "productName": "NEXUS_",
+  "productName": "Nexus",
   "version": "0.3.0",
   "description": "Lucro real por pedido para vendedores do Mercado Livre e da Shopee. Dados só no seu computador.",
-  "author": "NEXUS_ contributors",
+  "author": "Nexus contributors",
   "license": "MIT",
   "private": true,
   "engines": {
@@ -35,7 +35,7 @@
   },
   "build": {
     "appId": "io.github.mldashboard",
-    "productName": "NEXUS_",
+    "productName": "Nexus",
     "icon": "build/icon.ico",
     "npmRebuild": false,
     "files": [

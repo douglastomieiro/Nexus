@@ -1,11 +1,11 @@
-# Privacidade e segurança do NEXUS_
+# Privacidade e segurança do Nexus
 
 Resumo: **seus pedidos, custos e margens ficam só no seu computador.** Não temos servidor com os seus dados, não pedimos cadastro e não vendemos, compartilhamos ou analisamos informação nenhuma sobre você ou sua loja.
 
 Este documento diz exatamente o que o app faz. O código é aberto: você ou alguém de confiança pode conferir cada afirmação aqui.
 
 ## O que fica no seu computador
-Tudo isto fica em `%APPDATA%\NEXUS_` e **nunca** é enviado para nós:
+Tudo isto fica em `%APPDATA%\Nexus` e **nunca** é enviado para nós:
 - pedidos, anúncios, devoluções, Ads, faturas e demais dados baixados da sua loja;
 - os custos dos produtos, as alíquotas de imposto e as margens calculadas;
 - as autorizações (tokens) das suas contas, **cifradas** com o cofre do Windows;
@@ -45,7 +45,7 @@ Limite honesto: quem tem acesso à sua conta de usuário do Windows (por exemplo
 
 ## Seus controles
 - **Desconectar uma loja:** tela **Contas → Desconectar**. O acesso é apagado do computador. Para revogar também no Mercado Livre, remova o aplicativo em *Minha conta → Segurança → Aplicativos conectados*.
-- **Apagar tudo:** desinstale o app e apague a pasta `%APPDATA%\NEXUS_` (e `backup-custos`, se existir).
+- **Apagar tudo:** desinstale o app e apague a pasta `%APPDATA%\Nexus` (e `backup-custos`, se existir).
 - **Exportar seus custos:** estão em `backup-custos` em JSON e CSV.
 
 ## Dados pessoais e LGPD
