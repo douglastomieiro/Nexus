@@ -2,7 +2,7 @@
 
 # Nexus — saiba o lucro real de cada pedido
 
-Painel gratuito para vendedores do **Mercado Livre** (Shopee em breve). Mostra quanto você realmente ganhou em cada venda, já descontando comissão, frete, imposto, custo do produto, Ads e devoluções.
+Painel gratuito para vendedores do **Mercado Livre**. Mostra quanto você realmente ganhou em cada venda, já descontando comissão, frete, imposto, custo do produto, Ads e devoluções.
 
 ## Seus dados são seus. Ponto.
 
@@ -38,7 +38,6 @@ Para o Mercado Livre liberar o acesso à sua loja, é preciso uma "senha do apli
 - **Devoluções, envios, atendimento, reputação e Full/estoque.**
 - **Alertas** do que precisa de atenção.
 - **Várias contas/lojas** do Mercado Livre no mesmo painel.
-- **Shopee: em breve.**
 
 ## Como instalar (Windows)
 
