@@ -1,5 +1,5 @@
 {
-  "name": "nexus",
+  "name": "ml-dashboard",
   "productName": "NEXUS_",
   "version": "0.2.0",
   "description": "Lucro real por pedido para vendedores do Mercado Livre e da Shopee. Dados só no seu computador.",
@@ -34,7 +34,7 @@
     "electron-builder": "26.15.3"
   },
   "build": {
-    "appId": "io.github.nexus",
+    "appId": "io.github.mldashboard",
     "productName": "NEXUS_",
     "icon": "build/icon.ico",
     "npmRebuild": false,

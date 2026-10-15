@@ -11,7 +11,7 @@ fs.mkdirSync(path.join(OUT, 'docs/pages'), { recursive: true });
 const get = async (url, tries = 3) => {
   for (let i = 0; i < tries; i++) {
     try {
-      const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 nexus-docs-reader' } });
+      const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 ml-dashboard-docs-reader' } });
       if (r.ok) return await r.text();
     } catch {}
     await new Promise(r => setTimeout(r, 800 * (i + 1)));

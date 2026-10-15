@@ -23,12 +23,12 @@ const PORT = process.env.PORT != null && process.env.PORT !== '' ? Number(proces
 // Só a própria máquina acessa (sem autenticação: nunca expor). Para rede privada (ex.: Tailscale), HOST=<IP dessa interface> no ambiente ou no .env.
 const HOST = process.env.HOST || env.HOST || '127.0.0.1';
 
-// App desktop: NEXUS_CHAVE (gerada a cada abertura) só a janela do app conhece, num cookie SameSite=Strict.
+// App desktop: ML_DASH_CHAVE (gerada a cada abertura) só a janela do app conhece, num cookie SameSite=Strict.
 // Sem a chave → 403: outros programas do PC e sites abertos no navegador não conseguem usar a API.
 // O Host precisa ser 127.0.0.1:<porta> (bloqueia DNS rebinding).
-const CHAVE = process.env.NEXUS_CHAVE;
+const CHAVE = process.env.ML_DASH_CHAVE;
 if (CHAVE) app.use((req, res, next) => {
-  const ck = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('nexus='))?.slice(6) || '';
+  const ck = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('mldash='))?.slice(7) || '';
   const hostOk = req.headers.host === `127.0.0.1:${req.socket.localPort}`;
   // Exceção: o retorno do login vem do navegador do sistema (sem o cookie); ele se valida pelo nonce de uso único (server/contas.js).
   if (hostOk && req.method === 'GET' && req.path === '/oauth/ml/retorno') return next();

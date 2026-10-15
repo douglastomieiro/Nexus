@@ -13,7 +13,7 @@ O Mercado Livre exige a senha do aplicativo (`client_secret`) para trocar a auto
 1. Crie um app no [DevCenter do Mercado Livre](https://developers.mercadolivre.com.br/devcenter) com **PKCE habilitado**, permissões de leitura/escrita e acesso offline. URI de redirecionamento: `https://<seu-worker>.workers.dev/ml/callback`.
 2. Em `broker/wrangler.toml`, preencha `ML_CLIENT_ID`. Grave a senha como secret: `npx wrangler secret put ML_CLIENT_SECRET`.
 3. Publique: `npx wrangler deploy` (dentro de `broker/`).
-4. Copie `app-config.example.json` para `app-config.json` (fica fora do git), coloque o endereço do Worker e gere o instalador (`npm run dist`). Para testar sem recompilar: `NEXUS_BROKER=https://...` no `.env` da pasta de dados.
+4. Copie `app-config.example.json` para `app-config.json` (fica fora do git), coloque o endereço do Worker e gere o instalador (`npm run dist`). Para testar sem recompilar: `ML_DASH_BROKER=https://...` no `.env` da pasta de dados.
 
 ## Publicar uma versão (atualiza todo mundo)
 O GitHub Actions (`.github/workflows/publicar.yml`) gera o instalador e cria a release quando recebe uma tag `v<versão>`.
@@ -33,7 +33,7 @@ Para gerar só o instalador no seu PC, sem publicar: `npm run dist` (sai em `dis
 Opcional, na pasta de dados (ou na pasta do projeto rodando com `node start.js`, que exige Node 22+):
 - `TOKENS_LOJA<n>` / `NOME_LOJA<n>`: conta do ML lida de um arquivo de token mantido por **outro** programa (JSON com `access_token`, `expires_in` em segundos e `updated_at` em ms). O painel só lê e espera a renovação feita por fora.
 - **Shopee** (por enquanto só aqui): `SHOPEE_TOKENS_LOJA<n>` (JSON com `access_token`, `expire_in`, `last_refresh_time`) + `SHOPEE_PARTNER_ID_LOJA<n>` / `SHOPEE_PARTNER_KEY_LOJA<n>`. A conta Shopee `shopee<n>` é tratada como a **mesma empresa** da conta ML `loja<n>` (mesma alíquota, mesmo filtro de loja).
-- `NEXUS_BROKER`: outro intermediário (o seu, por exemplo).
+- `ML_DASH_BROKER`: outro intermediário (o seu, por exemplo).
 - `HOST` (só com `node start.js`): padrão `127.0.0.1`. `0.0.0.0` abre para a rede local sem senha — **nunca** publique a porta na internet.
 - Nunca versione, sincronize nem compartilhe o `.env`, a pasta `data/` ou arquivos de token.
 
