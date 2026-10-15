@@ -14,6 +14,7 @@ export function iniciarAtualizacoes(janela) {
   autoUpdater.logger = { info: m => console.log('[atualização]', m), warn: m => console.warn('[atualização]', m), error: m => console.error('[atualização]', m), debug: () => {} };
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.disableWebInstaller = true; // só o instalador completo (não usamos o instalador web)
 
   autoUpdater.on('update-not-available', () => {
     if (manual) dialog.showMessageBox(janelaRef(), { type: 'info', title: 'Atualizações', message: `Você já está na versão mais recente (${app.getVersion()}).` });
