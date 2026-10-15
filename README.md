@@ -42,7 +42,7 @@ Para o Mercado Livre liberar o acesso à sua loja, é preciso uma "senha do apli
 
 ## Como instalar (Windows)
 
-1. Baixe o instalador `NEXUS_ Setup <versão>.exe` na página de [Releases](https://github.com/douglastomieiro/ydata/releases/latest) e rode.
+1. Baixe o instalador `NEXUS_ Setup <versão>.exe` na página de [Releases](https://github.com/douglastomieiro/NEXUS_/releases/latest) e rode.
    > Como o instalador ainda não tem assinatura digital paga, o Windows pode mostrar "O Windows protegeu o computador". Clique em **Mais informações → Executar assim mesmo**.
 2. Abra o **NEXUS_**. Na primeira vez ele abre a tela **Contas**.
 3. Clique em **Copiar link de autorização**, cole no navegador em que sua conta do Mercado Livre está logada e clique em **Autorizar**. Com mais de uma loja, repita no navegador (ou perfil) de cada conta. Depois volte ao app e clique em **Reiniciar agora**.
@@ -65,7 +65,7 @@ Para o Mercado Livre liberar o acesso à sua loja, é preciso uma "senha do apli
 
 ## Dúvidas, problemas ou sugestões
 
-Abra uma [issue](https://github.com/douglastomieiro/ydata/issues). Não coloque tokens, senhas nem dados da sua loja ao relatar um problema.
+Abra uma [issue](https://github.com/douglastomieiro/NEXUS_/issues). Não coloque tokens, senhas nem dados da sua loja ao relatar um problema.
 
 ---
 

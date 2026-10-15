@@ -52,7 +52,7 @@ Limite honesto: quem tem acesso à sua conta de usuário do Windows (por exemplo
 Como não recebemos nenhum dado seu ou dos seus clientes, não somos controladores nem operadores desses dados. Os dados dos compradores que o Mercado Livre entrega ao app (por exemplo, nome e cidade em um pedido) ficam apenas no seu computador, e você é quem responde por eles perante a LGPD. Recomendamos não copiar nem compartilhar a pasta de dados.
 
 ## Pedidos de ajuda e dúvidas
-Abra uma [issue](https://github.com/douglastomieiro/ydata/issues). **Nunca** cole tokens, senhas ou dados da sua loja ao relatar um problema.
+Abra uma [issue](https://github.com/douglastomieiro/NEXUS_/issues). **Nunca** cole tokens, senhas ou dados da sua loja ao relatar um problema.
 
 Se encontrar uma falha de segurança, avise em particular pelo recurso de aviso de vulnerabilidade do GitHub (aba *Security* do repositório) antes de divulgar.
 
