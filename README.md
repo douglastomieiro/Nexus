@@ -1,114 +1,72 @@
-# ML Dashboard — lucro real por pedido (Mercado Livre + Shopee)
+# ML Dashboard — saiba o lucro real de cada pedido
 
-Painel gratuito e de código aberto para vendedores do Mercado Livre e da Shopee. Calcula o **lucro real de cada pedido** (comissão, frete, imposto, custo do produto, Ads e devoluções) a partir das APIs oficiais.
+Painel gratuito para vendedores do **Mercado Livre** e da **Shopee**. Mostra quanto você realmente ganhou em cada venda, já descontando comissão, frete, imposto, custo do produto, Ads e devoluções.
 
-- **Seus dados ficam no seu computador.** Pedidos, custos e tokens ficam num banco SQLite local; o app só conversa com as APIs do Mercado Livre e da Shopee.
-- **Sem cadastro e sem mensalidade.** O único serviço do projeto na internet é o **intermediário de login** (veja abaixo), que não guarda nada. Licença MIT (veja `LICENSE`).
+## Seus dados são seus. Ponto.
 
-## Instalação (app para Windows)
-1. Baixe o instalador `ML Dashboard Setup <versão>.exe` na página [Releases](https://github.com/douglastomieiro/ydata/releases/latest) e rode. Sem assinatura digital, o Windows mostra "Windows protegeu o computador": clique em **Mais informações → Executar assim mesmo**.
-2. Abra o **ML Dashboard**. Na primeira vez ele abre a tela **Contas**.
-3. Clique em **Copiar link de autorização**, cole no navegador em que a conta do Mercado Livre está logada e clique em **Autorizar**. Para cada loja, repita no navegador (ou perfil) da conta correspondente. Volte ao app e clique em **Reiniciar agora**.
-4. A primeira carga busca 12 meses de pedidos (algumas dezenas de minutos; o painel já funciona durante a carga).
-5. Em **Configurações**, informe a alíquota do Simples de cada conta e, em **Custos**, o custo de cada SKU.
+Muitas plataformas que se conectam à sua loja guardam seus pedidos, custos e margens em servidores deles. Esses dados mostram quanto você paga pelos produtos, qual é sua margem e o que vende mais, e é exatamente o que um concorrente gostaria de ter. O ML Dashboard foi feito para que isso **não aconteça**:
 
-Os dados ficam em `%APPDATA%\ML Dashboard` (menu Arquivo → "Abrir pasta de dados").
-
-**Atualizações:** o app procura versão nova ao abrir e a cada 6 horas (e no menu Arquivo → "Verificar atualizações"). Baixa em segundo plano, confere a integridade do arquivo e pergunta se quer reiniciar; se não, instala ao fechar. Contas e dados continuam.
-
-**Segurança do app:** o servidor interno só escuta em `127.0.0.1`, numa porta sorteada a cada abertura, e exige uma chave criada a cada abertura que só a janela do app conhece (outros programas e sites recebem 403). Os tokens das contas ficam cifrados com o cofre do Windows.
-
-## Login nas contas (como funciona)
-O Mercado Livre exige a senha do aplicativo (`client_secret`) para trocar a autorização por tokens e para renová-los (o acesso vence a cada ~6 h). Essa senha não pode ir dentro do app — qualquer um a extrairia —, então fica num **intermediário** mínimo (`broker/worker.js`, Cloudflare Worker, código aberto):
-- o app abre a página oficial do ML; depois do "Autorizar", o ML volta ao intermediário, que repassa o código ao app no **seu** computador;
-- o app troca o código pelos tokens via intermediário, usando **PKCE** (o código não vale nada sem um segredo que só o app tem);
-- as renovações também passam pelo intermediário. Ele **não tem banco nem log**: os tokens só ficam no seu PC.
-- O app é o **único** que renova os tokens das contas conectadas (o refresh_token do ML é de uso único).
-
-### Publicar o intermediário (quem distribui o app)
-1. Crie um app no [DevCenter do Mercado Livre](https://developers.mercadolivre.com.br/devcenter) com **PKCE habilitado**, permissões de leitura/escrita e acesso offline. URI de redirecionamento: `https://<seu-worker>.workers.dev/ml/callback`.
-2. Em `broker/wrangler.toml`, preencha `ML_CLIENT_ID`. Grave a senha como secret: `npx wrangler secret put ML_CLIENT_SECRET`.
-3. Publique: `npx wrangler deploy` (dentro de `broker/`).
-4. Copie `app-config.example.json` para `app-config.json` (fica fora do git), coloque o endereço do Worker e gere o instalador (`npm run dist`). Para testar sem recompilar: `ML_DASH_BROKER=https://...` no `.env` da pasta de dados.
-
-### Publicar uma versão (atualiza todo mundo)
-O GitHub Actions (`.github/workflows/publicar.yml`) gera o instalador e cria a release quando recebe uma tag `v<versão>`.
-
-**Uma vez só:** no GitHub, *Settings → Secrets and variables → Actions → Variables → New repository variable*: `BROKER_URL` = endereço do intermediário.
-
-**A cada versão:**
-1. `npm run versao -- patch` (correção: 0.2.0 → 0.2.1) ou `-- minor` (novidade: 0.2.0 → 0.3.0). Isso só muda o `package.json`.
-2. `git commit -am "Versão 0.2.1"` e `git tag v0.2.1`.
-3. `git push --follow-tags`.
-4. Aguarde o Actions terminar (aba *Actions*, uns 5–10 min). Ele cria um **rascunho** em *Releases* com o `.exe` e o `latest.yml`.
-5. Abra o rascunho, escreva o que mudou e clique em **Publish release**. A partir daí os apps instalados se atualizam sozinhos.
-
-Para gerar só o instalador no seu PC, sem publicar: `npm run dist` (sai em `dist/<versão>/`).
-
-## Modo avançado (.env)
-Opcional, na pasta de dados (ou na pasta do projeto rodando com `node start.js`, que exige Node 22+):
-- `TOKENS_LOJA<n>` / `NOME_LOJA<n>`: conta do ML lida de um arquivo de token mantido por **outro** programa (JSON com `access_token`, `expires_in` em segundos e `updated_at` em ms). O painel só lê e espera a renovação feita por fora.
-- **Shopee** (por enquanto só aqui): `SHOPEE_TOKENS_LOJA<n>` (JSON com `access_token`, `expire_in`, `last_refresh_time`) + `SHOPEE_PARTNER_ID_LOJA<n>` / `SHOPEE_PARTNER_KEY_LOJA<n>`. A conta Shopee `shopee<n>` é tratada como a **mesma empresa** da conta ML `loja<n>` (mesma alíquota, mesmo filtro de loja).
-- `ML_DASH_BROKER`: outro intermediário (o seu, por exemplo).
-- `HOST` (só com `node start.js`): padrão `127.0.0.1`. `0.0.0.0` abre para a rede local sem senha — **nunca** publique a porta na internet.
-- Nunca versione, sincronize nem compartilhe o `.env`, a pasta `data/` ou arquivos de token.
-
-## Organização do menu
-Cada item do menu é um grupo; as telas do grupo aparecem como abas no topo.
-| Grupo | Abas |
+| | |
 |---|---|
-| **Dashboard** | Dashboard (meta do mês, KPIs, recomendações, vendas diárias, por conta/logística/estado, top 10), Visão geral, Alertas, ML + Shopee |
-| **Finanças** | DRE (meses em colunas + faturas do ML), Indicadores (rentabilidade, custos em % da receita, eficiência — 6 meses) |
-| **Análise de Pedidos** | Análise de Pedidos (custos, repasse, resultado e margem por pedido; frete da NF e imposto sobre ele), Consulta (API), Devoluções, Envios, Atendimento |
-| **Gestão de Produtos** | Tabela de Produtos (curva ABC + sinais), Análise por SKU (`#sku:CODIGO`), Custos, Cadastros (anúncios), Calculadora (preço/margem) |
-| **Gestão Mercado Livre** | Dashboard de Ads, Campanhas, Anúncios Patrocinados (ACOS × margem), Anúncios Gerais, Promoções, **Descontos**, Full / Estoque, Reputação |
-| **Gestão Shopee** | Dashboard, Pedidos, Produtos, Anúncios / Estoque, Ads, Promoções, Devoluções |
-| **Configurações** | Configurações, Cobertura, Explorador de API |
+| 🖥️ **Tudo fica no seu computador** | Pedidos, custos, margens e relatórios ficam num banco de dados dentro do seu PC. Não existe servidor nosso guardando suas informações. |
+| 🔒 **Seu custo e sua margem nunca saem daí** | O custo que você digita por produto só existe na sua máquina. Ninguém consegue ver, copiar ou vender. |
+| 🚫 **Sem cadastro, sem conta, sem mensalidade** | Você não cria login conosco e não nos informa e-mail, CPF ou CNPJ. |
+| 👁️ **Sem rastreamento** | Não há anúncios, analytics nem telemetria. O app só conversa com o Mercado Livre, a Shopee e o GitHub (para buscar atualizações). |
+| 🔑 **Acesso protegido** | As autorizações das suas lojas são guardadas **cifradas** pelo cofre do próprio Windows. O painel interno só responde ao próprio app, e outros programas e sites do seu computador são bloqueados. |
+| 📖 **Código aberto** | Qualquer pessoa pode ler o código e conferir que é assim (licença MIT). Você não precisa confiar na nossa palavra. |
+| 👀 **Só leitura (quase sempre)** | O app apenas consulta suas lojas. A única tela que altera algo é **Descontos**, e só quando você mandar aplicar. |
 
-- O filtro de **período** só aparece nas telas em que ele vale; nas outras aparece a janela usada (ex.: "últimos 90 dias" no Ads).
-- O cabeçalho mostra **há quanto tempo os pedidos foram sincronizados** (verde ≤ 20 min, amarelo ≤ 2 h, vermelho acima: servidor parado ou token vencido).
-- Meta de faturamento e preferências (métrica da curva ABC, valores da calculadora) ficam no navegador (localStorage).
-- Clique no ID → abre a página no Mercado Livre; `{ }` → retorno bruto da API.
+### O único ponto na internet: o login
+Para o Mercado Livre liberar o acesso à sua loja, é preciso uma "senha do aplicativo" que não pode ficar dentro do programa. Ela fica num pequeno **intermediário de login** (código aberto, em `broker/`), que apenas repassa o pedido de autorização ao Mercado Livre. Ele **não tem banco de dados nem registro de nada**: seus pedidos, custos e margens jamais passam por ele. As autorizações ficam só no seu computador.
 
-## Coleta
-Agendador interno: pedidos/atendimento a cada 5 min · anúncios a cada 1 h · Ads a cada 3 h · conta/promoções/categorias 03:30 · fatura do ML 04:30 · histórico de frete 05:00. Shopee: pedidos + escrow a cada 5 min, devoluções a cada hora.
-Manual: `node server/collect.js [loja1 ...] [modulo ...] [--force] [--meses=12]` e `node server/shopee-collect.js [shopee1 ...] [pedidos|devolucoes] [--force] [--meses=12]`.
-`SEM_COLETA=1` no ambiente sobe só o painel, sem agendador.
+### Você está no controle
+- Para desconectar uma loja, clique em **Desconectar** na tela **Contas** (o acesso é apagado do computador) e, se quiser, revogue o acesso na sua conta do Mercado Livre.
+- Para apagar tudo, desinstale o app e apague a pasta `%APPDATA%\ML Dashboard`.
+- Seus custos têm cópia de segurança automática, também no seu computador.
 
-## Como o lucro é calculado (Mercado Livre, por item de cada pedido)
-`lucro = receita − devolução − comissão ML − frete do vendedor − imposto − custo do produto − Ads`
-- **Comissão**: `sale_fee` do pedido (confere centavo a centavo com o billing do ML, inclusive em pedidos antigos).
-- **Frete**: custo do vendedor em `shipments/{id}/costs`, coletado para os 12 meses. O comprador repassa a parte dele; o ML cobra o frete total na fatura, mas o custo líquido é o do vendedor.
-- **Imposto (Simples)**: alíquota do mês × (receita + frete cobrado do comprador na NF-e). Informe a alíquota em **Configurações** (modo manual). O frete do comprador não é receita nem custo, mas entra na base do imposto.
-- **Custo do produto**: digitado por SKU. **Ads**: custo por anúncio/dia (API, 90 dias) rateado entre os pedidos do dia; gasto sem venda aparece à parte.
-- **Devoluções**: pedidos cancelados com reembolso saem da receita; perda = frete de ida + tarifa de devolução + comissão não estornados (extrato do pedido na fatura) + retenção `fee_spl` e taxa de parcelamento não estornadas (pagamento do MP) (+ custo do produto, se marcado e o produto chegou a sair). Venda mantida por cobertura do ML (`bpp_covered`): entra o líquido recebido − imposto − custo (pode ser negativo).
-- **Reembolso parcial** (pedido continua válido): receita, comissão e frete na NF caem na proporção do reembolso; o custo do produto só é abatido quando o reembolso corresponde a unidades inteiras devolvidas.
-- **DRE / fatura do ML**: "outras cobranças" = Full (armazenagem, coleta, inconformidade), eShop, DIFAL e não identificadas. NÃO entram: parcelamento (CFONPN — acréscimo pago pelo comprador, soma zero) e tarifas de devolução (já contadas por pedido). A fatura é por período de cobrança (≈ 16→15), não por mês-calendário.
-- **Precisão depende dos custos**: SKU sem custo conta como R$ 0. Preencha em **Custos** (dá para colar `SKU;custo` em lote de uma planilha).
-- **Dia comercial** = fuso de Brasília (o ML devolve datas em -04:00).
+## O que você ganha
 
-## Shopee (só leitura)
-- **Lucro:** a Shopee entrega o repasse real de cada pedido (`payment/get_escrow_detail_batch`, campo `escrow_amount`). `lucro = escrow − imposto − custo`. Colunas: faturamento, comissão/taxas, frete líquido, devolução e **ajustes** (vouchers do vendedor, compensações, retenções), de modo que tudo fecha com o escrow. Pedido sem escrow é estimado pela taxa média da loja e marcado.
-- **Imposto:** mesma alíquota da conta ML de mesmo número, sobre faturamento − devolução + frete pago pelo comprador.
-- **Custos:** a mesma tabela do ML (por SKU). O SKU da Shopee é o da variação (`model_sku`); se não houver, o do anúncio.
-- **Ads:** a API só entrega o gasto da loja inteira por dia; o gasto é rateado entre os pedidos do dia pelo faturamento.
-- **Ainda não tem:** campanhas relâmpago, aplicar descontos/cupons pela API, "por estado" (dado do comprador vem mascarado) e DRE com fatura (o consolidado ML + Shopee cobre o resultado mensal).
+- **Lucro real por pedido**, com comissão, frete, imposto (Simples), custo do produto, Ads e devoluções.
+- **Dashboard** com meta do mês, vendas por dia, por conta, por estado, top produtos e recomendações.
+- **DRE mensal** e indicadores de rentabilidade.
+- **Curva ABC e análise por produto (SKU)**, com sinais do que vale a pena manter, reajustar ou parar.
+- **Calculadora de preço e margem.**
+- **Ads**: ACOS comparado com a sua margem, para saber qual campanha dá lucro de verdade.
+- **Promoções e descontos** (inclusive em massa), mostrando a margem de cada preço antes de aplicar.
+- **Devoluções, envios, atendimento, reputação e Full/estoque.**
+- **Alertas** do que precisa de atenção.
+- **Mercado Livre e Shopee** juntos, com várias contas/lojas.
 
-## Descontos (única tela que ESCREVE no Mercado Livre)
-Em Gestão Mercado Livre → **Descontos**: lista os anúncios ao vivo; define preço ou % de desconto por anúncio, nos selecionados ou em massa; **aplica** (PRICE_DISCOUNT, 1–30 dias) e **desativa** a promoção no ML; lote com barra de progresso, repetição automática das falhas e botão cancelar; categorias próprias por loja; **Promoções ML** (DEAL, relâmpago, SMART, volume…); cada preço mostra a margem (comissão, frete, imposto e custo).
-Usa os mesmos tokens das contas conectadas na tela **Contas** (o app do intermediário precisa ter permissão de escrita).
+## Como instalar (Windows)
 
-## Backup dos custos
-Os custos digitados à mão não podem ser recoletados da API, então são salvos a cada alteração em `backup-custos/` (fora de `data/`):
-- `custos-atual.json` e `custos-atual.csv` — último estado; `historico/` — um instantâneo por hora com alteração (últimos 200).
-- Se a tabela de custos estiver vazia ao iniciar e houver backup, ele é **restaurado sozinho**. Um backup com custos nunca é trocado por um vazio.
-- Manual: `node scripts/backup-custos.mjs` (faz backup) · `node scripts/backup-custos.mjs --restaurar [arquivo.json] [--forcar]`.
+1. Baixe o instalador `ML Dashboard Setup <versão>.exe` na página de [Releases](https://github.com/douglastomieiro/ydata/releases/latest) e rode.
+   > Como o instalador ainda não tem assinatura digital paga, o Windows pode mostrar "O Windows protegeu o computador". Clique em **Mais informações → Executar assim mesmo**.
+2. Abra o **ML Dashboard**. Na primeira vez ele abre a tela **Contas**.
+3. Clique em **Copiar link de autorização**, cole no navegador em que sua conta do Mercado Livre está logada e clique em **Autorizar**. Com mais de uma loja, repita no navegador (ou perfil) de cada conta. Depois volte ao app e clique em **Reiniciar agora**.
+4. Aguarde a primeira carga, que busca 12 meses de pedidos (pode levar algumas dezenas de minutos). O painel já funciona enquanto carrega.
+5. Em **Configurações**, informe a alíquota do Simples de cada conta e, em **Custos**, o custo de cada produto.
 
-## Estrutura
-- `server/` — `index.js` (API e site), `collectors.js` (coleta ML), `margem.js` (motor de lucro, DRE, imposto), `analises.js` (alertas e margem das promoções), `painel.js` (telas do Dashboard), `sync.js` (agendador), `ml.js` (cliente ML + contas), `db.js` (SQLite), `shopee*.js` (cliente, coleta, motor e rotas da Shopee), `descontos/` (tela Descontos).
-- `web/` — `index.html` (base, menu, telas originais), `extra.js`, `jodda.js|css`, `shopee.js`, `descontos.js|css`.
-- `scripts/` — ferramentas de diagnóstico (`00-check.mjs` confere os tokens; `02-probe.mjs` e `03-report.mjs` testam a cobertura da API; `08-shopee-probe.mjs` sonda a Shopee).
-- `data/ml.db` — resposta crua de cada endpoint (recurso, chave). Falha nunca sobrescreve dado bom.
+> **Dica:** o lucro só é tão preciso quanto os custos que você informa. Produto sem custo conta como R$ 0. Em **Custos** dá para colar `SKU;custo` em lote, direto de uma planilha.
 
-## Licença
-MIT — veja `LICENSE`.
+**Atualizações automáticas:** o app procura versão nova ao abrir e a cada 6 horas, confere a integridade do arquivo e pergunta se você quer reiniciar. Suas contas e dados continuam intactos.
+
+## Como o lucro é calculado
+
+`lucro = receita − devolução − comissão − frete do vendedor − imposto − custo do produto − Ads`
+
+- **Comissão e frete** vêm direto do Mercado Livre, pedido a pedido (a comissão confere com a fatura).
+- **Imposto**: a alíquota do Simples que você informa, aplicada sobre a receita e o frete cobrado do comprador na nota.
+- **Ads**: o gasto de cada anúncio no dia é dividido entre os pedidos daquele dia.
+- **Devoluções**: saem da receita, e entram como perda o frete, as tarifas e a comissão que não foram estornados.
+- **Shopee**: usa o valor líquido que a própria Shopee repassa (`escrow`), menos imposto e custo.
+- O dia comercial segue o horário de Brasília.
+
+## Dúvidas, problemas ou sugestões
+
+Abra uma [issue](https://github.com/douglastomieiro/ydata/issues). Não coloque tokens, senhas nem dados da sua loja ao relatar um problema.
+
+---
+
+Documentação técnica (publicar versões, intermediário de login, modo avançado, estrutura do código): [docs/DESENVOLVIMENTO.md](docs/DESENVOLVIMENTO.md).
+
+Licença MIT — veja [LICENSE](LICENSE).
