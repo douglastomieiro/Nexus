@@ -36,8 +36,6 @@
         (ou perfil) onde a conta desejada já está logada no Mercado Livre e clique em <b>Autorizar</b>. Repita para cada loja — cada link vale uma vez, por 15 minutos.<br>
         O acesso fica guardado só neste computador, cifrado. O app precisa estar aberto enquanto você autoriza.</p>
       ${d.arquivo.length ? `<hr style="border-color:var(--bd)"><p style="color:var(--mut);font-size:13px">Também em uso pelo modo avançado (arquivo de token no .env): ${d.arquivo.map(a => esc(a.nome)).join(', ')}.</p>` : ''}
-      <hr style="border-color:var(--bd)"><h4 style="margin-bottom:4px">Shopee</h4>
-      <p style="color:var(--mut);font-size:13px">Em breve. Por enquanto a Shopee só funciona pelo modo avançado (.env), com as credenciais de parceiro da sua loja.</p>
     </div>`;
 
     // modo 'copiar': mostra/copia o link (para colar no navegador da conta certa); modo 'abrir': abre no navegador padrão
