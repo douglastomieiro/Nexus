@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 
-const PROJ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), DADOS = fs.mkdtempSync(path.join(os.tmpdir(), 'mldash-teste-'));
+const PROJ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), DADOS = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-teste-'));
 const ok = (c, m) => { console.log(`${c ? 'OK  ' : 'FALHA'} ${m}`); if (!c) process.exitCode = 1; };
 const escuta = srv => new Promise(r => srv.listen(0, '127.0.0.1', () => r(srv.address().port)));
 
@@ -52,10 +52,10 @@ const pBR = await escuta(broker);
 
 // ── servidor do app ──
 const CHAVE = crypto.randomBytes(16).toString('hex'), PORTA = 4000 + Math.floor(Math.random() * 900);
-const sobe = () => spawn(process.execPath, ['server/index.js'], { cwd: PROJ, env: { ...process.env, ML_DASH_DATA: DADOS, ML_DASH_CHAVE: CHAVE, ML_DASH_BROKER: `http://127.0.0.1:${pBR}`, PORT: String(PORTA), SEM_COLETA: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+const sobe = () => spawn(process.execPath, ['server/index.js'], { cwd: PROJ, env: { ...process.env, NEXUS_DATA: DADOS, NEXUS_CHAVE: CHAVE, NEXUS_BROKER: `http://127.0.0.1:${pBR}`, PORT: String(PORTA), SEM_COLETA: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let app = sobe(); let log = ''; app.stdout.on('data', d => (log += d)); app.stderr.on('data', d => (log += d));
 for (let i = 0; i < 40 && !log.includes('Nexus_ em'); i++) await new Promise(r => setTimeout(r, 250));
-const A = `http://127.0.0.1:${PORTA}`, ck = { cookie: `mldash=${CHAVE}` };
+const A = `http://127.0.0.1:${PORTA}`, ck = { cookie: `nexus=${CHAVE}` };
 
 const c0 = await fetch(A + '/api/contas', { headers: ck }).then(r => r.json());
 ok(c0.broker === true && c0.contas.length === 0, 'app vê o intermediário e começa sem contas');
@@ -98,7 +98,7 @@ app.kill();
 
 // renovação: token vencido + 3 pedidos ao mesmo tempo → UMA renovação (refresh de uso único)
 const t = JSON.parse(fs.readFileSync(arq, 'utf8')); t.updated_at = 0; fs.writeFileSync(arq, JSON.stringify(t));
-process.env.ML_DASH_DATA = DADOS; process.env.ML_DASH_BROKER = `http://127.0.0.1:${pBR}`;
+process.env.NEXUS_DATA = DADOS; process.env.NEXUS_BROKER = `http://127.0.0.1:${pBR}`;
 const { tokenConta } = await import(pathToFileURL(path.join(PROJ, 'server/contas.js')));
 const r3 = await Promise.all([tokenConta('987654321'), tokenConta('987654321'), tokenConta('987654321')]);
 ok(nRefresh === 1 && new Set(r3).size === 1 && r3[0] !== t.access_token, 'token vencido: 3 pedidos simultâneos → 1 renovação só');

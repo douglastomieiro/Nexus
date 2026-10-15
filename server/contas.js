@@ -9,10 +9,10 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { ROOT, DATA_DIR, env } from './ml.js';
 
-// Endereço do intermediário (broker/). Ordem: ML_DASH_BROKER no ambiente ou no .env da pasta de dados → app-config.json
+// Endereço do intermediário (broker/). Ordem: NEXUS_BROKER no ambiente ou no .env da pasta de dados → app-config.json
 // na raiz do programa (quem gera o instalador cria a partir de app-config.example.json; fica fora do git e vai dentro do .exe).
 const configEmbutida = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'app-config.json'), 'utf8')); } catch { return {}; } })();
-export const BROKER = String(process.env.ML_DASH_BROKER || env.ML_DASH_BROKER || configEmbutida.broker || '').replace(/\/+$/, '');
+export const BROKER = String(process.env.NEXUS_BROKER || env.ML_DASH_BROKER || env.NEXUS_BROKER || configEmbutida.broker || '').replace(/\/+$/, '');
 
 const DIR = path.join(DATA_DIR, 'data'), TOK = path.join(DIR, 'tokens'), LISTA = path.join(DIR, 'contas.json');
 fs.mkdirSync(TOK, { recursive: true });
@@ -37,7 +37,7 @@ export const temTokenConta = id => fs.existsSync(arqToken(id));
 
 // ───────── chamadas ao intermediário ─────────
 async function broker(rota, corpo) {
-  if (!BROKER) throw new Error('Intermediário de login não configurado (ML_DASH_BROKER).');
+  if (!BROKER) throw new Error('Intermediário de login não configurado (NEXUS_BROKER).');
   const r = await fetch(BROKER + rota, corpo ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(corpo), signal: AbortSignal.timeout(20000) } : { signal: AbortSignal.timeout(20000) });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) { const e = new Error(d.message || d.error_description || d.error || `HTTP ${r.status}`); e.status = r.status; e.codigo = d.error; throw e; }

@@ -38,8 +38,8 @@ process.on('unhandledRejection', e => console.error('[app] promessa rejeitada:',
 console.log(`[app] iniciando versão ${app.getVersion()} (Electron ${process.versions.electron})`);
 
 Object.assign(process.env, {
-  ML_DASH_DATA: DADOS,
-  ML_DASH_CHAVE: crypto.randomBytes(32).toString('hex'),
+  NEXUS_DATA: DADOS,
+  NEXUS_CHAVE: crypto.randomBytes(32).toString('hex'),
   HOST: '127.0.0.1',
   PORT: '0',
 });
@@ -73,7 +73,7 @@ app.whenReady().then(async () => {
     const { pronto } = await import('../server/index.js');
     const porta = await pronto;
     const url = `http://127.0.0.1:${porta}/`;
-    await session.defaultSession.cookies.set({ url, name: 'mldash', value: process.env.ML_DASH_CHAVE, httpOnly: true, sameSite: 'strict' });
+    await session.defaultSession.cookies.set({ url, name: 'nexus', value: process.env.NEXUS_CHAVE, httpOnly: true, sameSite: 'strict' });
 
     menu();
     janela = new BrowserWindow({
