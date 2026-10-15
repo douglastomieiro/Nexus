@@ -1,6 +1,6 @@
 # ML Dashboard — saiba o lucro real de cada pedido
 
-Painel gratuito para vendedores do **Mercado Livre** e da **Shopee**. Mostra quanto você realmente ganhou em cada venda, já descontando comissão, frete, imposto, custo do produto, Ads e devoluções.
+Painel gratuito para vendedores do **Mercado Livre** (Shopee em breve). Mostra quanto você realmente ganhou em cada venda, já descontando comissão, frete, imposto, custo do produto, Ads e devoluções.
 
 ## Seus dados são seus. Ponto.
 
@@ -11,7 +11,7 @@ Muitas plataformas que se conectam à sua loja guardam seus pedidos, custos e ma
 | 🖥️ **Tudo fica no seu computador** | Pedidos, custos, margens e relatórios ficam num banco de dados dentro do seu PC. Não existe servidor nosso guardando suas informações. |
 | 🔒 **Seu custo e sua margem nunca saem daí** | O custo que você digita por produto só existe na sua máquina. Ninguém consegue ver, copiar ou vender. |
 | 🚫 **Sem cadastro, sem conta, sem mensalidade** | Você não cria login conosco e não nos informa e-mail, CPF ou CNPJ. |
-| 👁️ **Sem rastreamento** | Não há anúncios, analytics nem telemetria. O app só conversa com o Mercado Livre, a Shopee e o GitHub (para buscar atualizações). |
+| 👁️ **Sem rastreamento** | Não há anúncios, analytics nem telemetria. O app só conversa com o Mercado Livre (e o Mercado Pago, para dados de pagamento dos seus pedidos), com o intermediário de login e com o GitHub (para buscar atualizações). Veja a lista completa em [PRIVACIDADE.md](PRIVACIDADE.md). |
 | 🔑 **Acesso protegido** | As autorizações das suas lojas são guardadas **cifradas** pelo cofre do próprio Windows. O painel interno só responde ao próprio app, e outros programas e sites do seu computador são bloqueados. |
 | 📖 **Código aberto** | Qualquer pessoa pode ler o código e conferir que é assim (licença MIT). Você não precisa confiar na nossa palavra. |
 | 👀 **Só leitura (quase sempre)** | O app apenas consulta suas lojas. A única tela que altera algo é **Descontos**, e só quando você mandar aplicar. |
@@ -35,7 +35,8 @@ Para o Mercado Livre liberar o acesso à sua loja, é preciso uma "senha do apli
 - **Promoções e descontos** (inclusive em massa), mostrando a margem de cada preço antes de aplicar.
 - **Devoluções, envios, atendimento, reputação e Full/estoque.**
 - **Alertas** do que precisa de atenção.
-- **Mercado Livre e Shopee** juntos, com várias contas/lojas.
+- **Várias contas/lojas** do Mercado Livre no mesmo painel.
+- **Shopee: em breve.**
 
 ## Como instalar (Windows)
 
@@ -58,7 +59,6 @@ Para o Mercado Livre liberar o acesso à sua loja, é preciso uma "senha do apli
 - **Imposto**: a alíquota do Simples que você informa, aplicada sobre a receita e o frete cobrado do comprador na nota.
 - **Ads**: o gasto de cada anúncio no dia é dividido entre os pedidos daquele dia.
 - **Devoluções**: saem da receita, e entram como perda o frete, as tarifas e a comissão que não foram estornados.
-- **Shopee**: usa o valor líquido que a própria Shopee repassa (`escrow`), menos imposto e custo.
 - O dia comercial segue o horário de Brasília.
 
 ## Dúvidas, problemas ou sugestões
@@ -69,4 +69,4 @@ Abra uma [issue](https://github.com/douglastomieiro/ydata/issues). Não coloque 
 
 Documentação técnica (publicar versões, intermediário de login, modo avançado, estrutura do código): [docs/DESENVOLVIMENTO.md](docs/DESENVOLVIMENTO.md).
 
-Licença MIT — veja [LICENSE](LICENSE).
+[Política de privacidade completa](PRIVACIDADE.md) · Licença MIT — veja [LICENSE](LICENSE).
