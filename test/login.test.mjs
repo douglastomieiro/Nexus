@@ -54,7 +54,7 @@ const pBR = await escuta(broker);
 const CHAVE = crypto.randomBytes(16).toString('hex'), PORTA = 4000 + Math.floor(Math.random() * 900);
 const sobe = () => spawn(process.execPath, ['server/index.js'], { cwd: PROJ, env: { ...process.env, NEXUS_DATA: DADOS, NEXUS_CHAVE: CHAVE, NEXUS_BROKER: `http://127.0.0.1:${pBR}`, PORT: String(PORTA), SEM_COLETA: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let app = sobe(); let log = ''; app.stdout.on('data', d => (log += d)); app.stderr.on('data', d => (log += d));
-for (let i = 0; i < 40 && !log.includes('Nexus_ em'); i++) await new Promise(r => setTimeout(r, 250));
+for (let i = 0; i < 40 && !log.includes('NEXUS_ em'); i++) await new Promise(r => setTimeout(r, 250));
 const A = `http://127.0.0.1:${PORTA}`, ck = { cookie: `nexus=${CHAVE}` };
 
 const c0 = await fetch(A + '/api/contas', { headers: ck }).then(r => r.json());
@@ -91,7 +91,7 @@ usuario = 987654321;
 // reinicia o servidor: a conta vira loja1
 app.kill(); await new Promise(r => setTimeout(r, 800));
 app = sobe(); log = ''; app.stdout.on('data', d => (log += d)); app.stderr.on('data', d => (log += d));
-for (let i = 0; i < 40 && !log.includes('Nexus_ em'); i++) await new Promise(r => setTimeout(r, 250));
+for (let i = 0; i < 40 && !log.includes('NEXUS_ em'); i++) await new Promise(r => setTimeout(r, 250));
 const lojas = await fetch(A + '/api/lojas', { headers: ck }).then(r => r.json());
 ok(lojas.loja1 && lojas.loja2 && (await fetch(A + '/api/contas', { headers: ck }).then(r => r.json())).reiniciar === false, `depois do reinício a conta aparece nas lojas (${JSON.stringify(lojas)})`);
 app.kill();
