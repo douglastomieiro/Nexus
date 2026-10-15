@@ -70,7 +70,7 @@ export function registrarDescontos(app) {
   // resolve a conta e anexa em req.mod
   const guard = (req_, res, next) => {
     const m = modulo(req_.params.id);
-    if (!m) return reply(res, 404, { message: 'Conta não encontrada ou sem token de escrita (veja a seção Descontos do LEIAME).', code: 'ACCOUNT_NOT_FOUND' });
+    if (!m) return reply(res, 404, { message: 'Conta não encontrada ou sem token de escrita (veja a seção Descontos do README).', code: 'ACCOUNT_NOT_FOUND' });
     req_.mod = m; next();
   };
   const H = fn => async (rq, rs) => { try { await fn(rq, rs); } catch (e) { rq.mod?.logger.error('Erro na rota', { rota: rq.path, erro: e.message }); reply(rs, 500, { message: e.message }); } };

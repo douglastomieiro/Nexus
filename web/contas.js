@@ -25,7 +25,7 @@
         <b>Contas atualizadas.</b> ${d.app ? 'Reinicie o app para começar a coletar.' : 'Reinicie o servidor (node start.js) para começar a coletar.'}
         ${d.app ? ' ' + btn('rei', 'Reiniciar agora', '#059669') : ''}</div>` : ''}
       ${!d.broker ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin:0 0 14px">
-        O login automático ainda não está configurado nesta versão (falta o endereço do intermediário — veja o LEIAME, "Publicar o intermediário").</div>` : ''}
+        O login automático ainda não está configurado nesta versão (falta o endereço do intermediário — veja o README, "Publicar o intermediário").</div>` : ''}
       ${d.contas.length ? `<div class="tw"><table><thead><tr><th>Nome no painel</th><th>Apelido no ML</th><th>Conectada em</th><th>Situação</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>`
         : '<p style="color:var(--mut)">Nenhuma conta conectada ainda.</p>'}
       <p style="margin-top:18px">${btn('lnk', '🔗 Copiar link de autorização', 'var(--ac)', d.broker ? '' : 'disabled')}

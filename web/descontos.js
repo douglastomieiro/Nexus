@@ -625,7 +625,7 @@
     const sel = $('#loja').value, f1 = D.contas.filter(c => c.loja === sel), doFiltro = f1.length ? f1 : D.contas;
     const comToken = doFiltro.filter(c => c.temToken);
     if (!D.contas.length || !comToken.length) {
-      $('#view').innerHTML = `<div class="box"><div class="empty"><b>Descontos ainda não está ligado</b>${!D.contas.length ? 'Nenhuma conta do Mercado Livre conectada para escrita.' : 'Faltam os tokens de escrita do Mercado Livre.'}<br>Veja a seção Descontos do LEIAME.</div></div>`;
+      $('#view').innerHTML = `<div class="box"><div class="empty"><b>Descontos ainda não está ligado</b>${!D.contas.length ? 'Nenhuma conta do Mercado Livre conectada para escrita.' : 'Faltam os tokens de escrita do Mercado Livre.'}<br>Veja a seção Descontos do README.</div></div>`;
       return;
     }
     Object.assign(D, { gen: (D.gen || 0) + 1, alvo: comToken, rows: [], filtered: [], cats: [], catAtiva: null, falhas: false, tipos: new Set(), sel: new Set(), busca: '', sort: { k: null, d: -1 }, mg: {}, camp: null, campSel: new Set() });
