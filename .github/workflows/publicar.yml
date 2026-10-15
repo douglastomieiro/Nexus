@@ -41,6 +41,15 @@ jobs:
 
       - run: npm test
 
+      # Cria o rascunho ANTES de enviar os arquivos: sem isso, os envios em paralelo criavam um rascunho cada (v0.2.0 saiu em dois).
+      - name: Criar o rascunho da release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --draft --title "${GITHUB_REF_NAME#v}" --notes "Versão ${GITHUB_REF_NAME#v}"
+
       - name: Gerar instalador e enviar para a release (rascunho)
         run: npx electron-builder --win nsis --publish always
         env:
