@@ -1,10 +1,12 @@
-# ML Dashboard — saiba o lucro real de cada pedido
+<p align="center"><img src="web/logo.svg" alt="Logo do Nexus_" width="130"></p>
+
+# Nexus_ — saiba o lucro real de cada pedido
 
 Painel gratuito para vendedores do **Mercado Livre** (Shopee em breve). Mostra quanto você realmente ganhou em cada venda, já descontando comissão, frete, imposto, custo do produto, Ads e devoluções.
 
 ## Seus dados são seus. Ponto.
 
-Muitas plataformas que se conectam à sua loja guardam seus pedidos, custos e margens em servidores deles. Esses dados mostram quanto você paga pelos produtos, qual é sua margem e o que vende mais, e é exatamente o que um concorrente gostaria de ter. O ML Dashboard foi feito para que isso **não aconteça**:
+Muitas plataformas que se conectam à sua loja guardam seus pedidos, custos e margens em servidores deles. Esses dados mostram quanto você paga pelos produtos, qual é sua margem e o que vende mais, e é exatamente o que um concorrente gostaria de ter. O Nexus_ foi feito para que isso **não aconteça**:
 
 | | |
 |---|---|
@@ -21,7 +23,7 @@ Para o Mercado Livre liberar o acesso à sua loja, é preciso uma "senha do apli
 
 ### Você está no controle
 - Para desconectar uma loja, clique em **Desconectar** na tela **Contas** (o acesso é apagado do computador) e, se quiser, revogue o acesso na sua conta do Mercado Livre.
-- Para apagar tudo, desinstale o app e apague a pasta `%APPDATA%\ML Dashboard`.
+- Para apagar tudo, desinstale o app e apague a pasta `%APPDATA%\Nexus_`.
 - Seus custos têm cópia de segurança automática, também no seu computador.
 
 ## O que você ganha
@@ -40,9 +42,9 @@ Para o Mercado Livre liberar o acesso à sua loja, é preciso uma "senha do apli
 
 ## Como instalar (Windows)
 
-1. Baixe o instalador `ML Dashboard Setup <versão>.exe` na página de [Releases](https://github.com/douglastomieiro/ydata/releases/latest) e rode.
+1. Baixe o instalador `Nexus_ Setup <versão>.exe` na página de [Releases](https://github.com/douglastomieiro/ydata/releases/latest) e rode.
    > Como o instalador ainda não tem assinatura digital paga, o Windows pode mostrar "O Windows protegeu o computador". Clique em **Mais informações → Executar assim mesmo**.
-2. Abra o **ML Dashboard**. Na primeira vez ele abre a tela **Contas**.
+2. Abra o **Nexus_**. Na primeira vez ele abre a tela **Contas**.
 3. Clique em **Copiar link de autorização**, cole no navegador em que sua conta do Mercado Livre está logada e clique em **Autorizar**. Com mais de uma loja, repita no navegador (ou perfil) de cada conta. Depois volte ao app e clique em **Reiniciar agora**.
 4. Aguarde a primeira carga, que busca 12 meses de pedidos (pode levar algumas dezenas de minutos). O painel já funciona enquanto carrega.
 5. Em **Configurações**, informe a alíquota do Simples de cada conta e, em **Custos**, o custo de cada produto.

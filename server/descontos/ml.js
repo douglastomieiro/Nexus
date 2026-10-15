@@ -32,7 +32,7 @@ class TokenManager {
   save(t) { const tmp = this.file + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(t, null, 2)); fs.renameSync(tmp, this.file); }
   async refresh() {
     const t = this.load();
-    if (!(t.client_id || env.ML_CLIENT_ID) || !(t.client_secret || env.ML_CLIENT_SECRET)) throw new Error('ML_CLIENT_ID/ML_CLIENT_SECRET ausentes no .env do ML Dashboard');
+    if (!(t.client_id || env.ML_CLIENT_ID) || !(t.client_secret || env.ML_CLIENT_SECRET)) throw new Error('ML_CLIENT_ID/ML_CLIENT_SECRET ausentes no .env do Nexus_');
     const res = await fetch(API + '/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ grant_type: 'refresh_token', client_id: t.client_id || env.ML_CLIENT_ID, client_secret: t.client_secret || env.ML_CLIENT_SECRET, refresh_token: t.refresh_token }).toString() });
     const d = await res.json().catch(() => ({}));

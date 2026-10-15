@@ -10,9 +10,18 @@ import { iniciarAtualizacoes, verificar } from './atualizacao.js';
 
 if (!app.requestSingleInstanceLock()) app.quit(); // uma janela só: o banco não pode ter dois servidores
 
-const DADOS = app.getPath('userData'); // Windows: %APPDATA%\ML Dashboard
+const DADOS = app.getPath('userData'); // Windows: %APPDATA%\Nexus_
+// O app se chamava "ML Dashboard": quem já tinha dados nessa pasta continua com eles (a pasta é renomeada uma única vez).
+try { // (o Electron já pode ter criado a pasta nova, então move item a item o que ainda não existe nela)
+  const antiga = path.join(app.getPath('appData'), 'ML Dashboard');
+  if (fs.existsSync(antiga)) {
+    fs.mkdirSync(DADOS, { recursive: true });
+    for (const n of fs.readdirSync(antiga)) if (!fs.existsSync(path.join(DADOS, n))) fs.renameSync(path.join(antiga, n), path.join(DADOS, n));
+    try { fs.rmdirSync(antiga); } catch { /* sobrou algo (ex.: cache): deixa */ }
+  }
+} catch { /* sem permissão: segue com a pasta nova */ }
 
-// Registro em %APPDATA%\ML Dashboard\app.log (o app não tem console visível). Tokens e códigos são mascarados.
+// Registro em %APPDATA%\Nexus_\app.log (o app não tem console visível). Tokens e códigos são mascarados.
 const LOG = path.join(DADOS, 'app.log');
 try { fs.mkdirSync(DADOS, { recursive: true }); if (fs.statSync(LOG).size > 2e6) fs.renameSync(LOG, LOG + '.1'); } catch { /* ainda não existe */ }
 const mascara = s => s.replace(/\b(APP_USR|TG)-[\w-]+/g, '$1-***').replace(/("?(?:access_token|refresh_token|code|code_verifier|client_secret)"?\s*[:=]\s*"?)[^"&\s,}]+/gi, '$1***');
@@ -68,7 +77,7 @@ app.whenReady().then(async () => {
 
     menu();
     janela = new BrowserWindow({
-      width: 1440, height: 900, show: false, title: 'ML Dashboard', autoHideMenuBar: true,
+      width: 1440, height: 900, show: false, title: 'Nexus_', icon: path.join(import.meta.dirname, '..', 'build', 'icon.png'), autoHideMenuBar: true,
       webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
     // Links externos (página do pedido no ML etc.) abrem no navegador padrão; a janela nunca sai do painel.
@@ -79,7 +88,7 @@ app.whenReady().then(async () => {
     await janela.loadURL(url);
     iniciarAtualizacoes(() => janela);
   } catch (e) {
-    dialog.showErrorBox('ML Dashboard não iniciou', String(e?.stack || e));
+    dialog.showErrorBox('Nexus_ não iniciou', String(e?.stack || e));
     app.quit();
   }
 });

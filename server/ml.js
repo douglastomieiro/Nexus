@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 // Raiz do programa (código e telas; no app instalado é só leitura)
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Pasta de DADOS do usuário: .env, data/ (banco, tokens de escrita) e backup-custos/. Caminhos de token do .env são relativos a ela.
-// No app (Electron) é a pasta do usuário no sistema (ex.: %APPDATA%\ML Dashboard); rodando com `node start.js`, a própria pasta do projeto.
+// No app (Electron) é a pasta do usuário no sistema (ex.: %APPDATA%\Nexus_); rodando com `node start.js`, a própria pasta do projeto.
 export const DATA_DIR = process.env.ML_DASH_DATA ? path.resolve(process.env.ML_DASH_DATA) : ROOT;
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const envFile = path.join(DATA_DIR, '.env');

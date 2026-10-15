@@ -1,4 +1,4 @@
-// Intermediário de login do ML Dashboard (Cloudflare Worker). Código aberto; NÃO guarda nada (sem banco, sem log de tokens).
+// Intermediário de login do Nexus_ (Cloudflare Worker). Código aberto; NÃO guarda nada (sem banco, sem log de tokens).
 //
 // Por que existe: o Mercado Livre exige a senha do aplicativo (client_secret) para trocar o código de autorização por tokens
 // e para renová-los. Essa senha não pode ir dentro do app instalado (qualquer um a extrairia), então fica só aqui.
@@ -62,7 +62,7 @@ export default {
       }
 
       if (req.method === 'GET' && url.pathname === '/')
-        return new Response('Intermediário de login do ML Dashboard (código aberto). Não guarda tokens nem dados.', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+        return new Response('Intermediário de login do Nexus_ (código aberto). Não guarda tokens nem dados.', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
       return json({ error: 'nao_encontrado' }, 404);
     } catch {
       return json({ error: 'requisicao_invalida' }, 400);

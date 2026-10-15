@@ -29,7 +29,7 @@ export function iniciarAtualizacoes(janela) {
     manual = false;
     const { response } = await dialog.showMessageBox(janelaRef(), {
       type: 'info', buttons: ['Reiniciar agora', 'Depois'], defaultId: 0, cancelId: 1, title: 'Atualização pronta',
-      message: `A versão ${info.version} do ML Dashboard foi baixada.`,
+      message: `A versão ${info.version} do Nexus_ foi baixada.`,
       detail: 'Reinicie para instalar. Se escolher "Depois", ela será instalada quando você fechar o app. Suas contas e dados continuam.',
     });
     if (response === 0) autoUpdater.quitAndInstall(true, true); // instalação silenciosa e reabre o app

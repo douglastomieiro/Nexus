@@ -139,7 +139,7 @@ export function gerarAlertas(lojas, nomes) {
   // 10) coleta de dados parada ou com erro
   for (const l of lojas) {
     const u = rows("SELECT fim FROM coleta_log WHERE loja=? AND modulo='pedidos' ORDER BY id DESC LIMIT 1", l)[0];
-    if (!u || Date.now() - u.fim > 30 * 60e3) add('alta', `${N(l)}: coleta de pedidos PARADA`, u ? `Última coleta há ${Math.round((Date.now() - u.fim) / 60e3)} min. Verifique se o sistema antigo está ligado (renova o token do ML) e o servidor do ML Dashboard.` : 'Nenhuma coleta registrada.', 'cobertura');
+    if (!u || Date.now() - u.fim > 30 * 60e3) add('alta', `${N(l)}: coleta de pedidos PARADA`, u ? `Última coleta há ${Math.round((Date.now() - u.fim) / 60e3)} min. Verifique se o sistema antigo está ligado (renova o token do ML) e o servidor do Nexus_.` : 'Nenhuma coleta registrada.', 'cobertura');
   }
 
   const ordem = { alta: 0, media: 1, info: 2 };

@@ -227,7 +227,7 @@ app.use(express.static(path.join(ROOT, 'web')));
 export const pronto = new Promise((resolve, reject) => {
   const srv = app.listen(PORT, HOST, () => {
     const porta = srv.address().port;
-    console.log(`ML Dashboard em http://${HOST}:${porta}`);
+    console.log(`Nexus_ em http://${HOST}:${porta}`);
     if (!process.env.SEM_COLETA) agendar();
     resolve(porta);
   });

@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ML Dashboard</title>
+<title>Nexus_</title>
+<link rel="icon" type="image/svg+xml" href="logo.svg">
 <script src="vendor/chart.umd.js"></script>
 <style>
 :root{--bg:#f4f6fb;--panel:#fff;--panel2:#f3f6fc;--bd:#e4e9f2;--tx:#1e293b;--mut:#64748b;--ac:#2563eb;--ac2:#eaf0ff;--ok:#16a34a;--bad:#dc2626;--warn:#d97706;--l1:#2563eb;--l2:#ea580c;--sh:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.04)}
@@ -142,7 +143,7 @@ details summary{cursor:pointer}hr{border:0;border-top:1px solid var(--bd)}
 </head>
 <body>
 <nav>
-  <div class="brand"><i>ML</i><span>ML<small>.dash</small></span></div>
+  <div class="brand"><img src="logo.svg" alt="" width="30" height="32"><span>Nexus<small>_</small></span></div>
   <div class="user"><b id="uav">ML</b><div><span>Mercado Livre</span><small id="usub">Lucro real por pedido</small></div></div>
   <label class="pinsw" title="Mantém o menu sempre visível"><span>Fixar menu</span><input type="checkbox" id="pinmenu"><span class="sw"></span></label>
   <div id="menu"></div>
@@ -552,7 +553,7 @@ async function statusColeta() {
     const min = ult ? Math.round((s.agora - ult) / 6e4) : null;
     const txt = min == null ? 'coleta ainda não executada' : min < 60 ? `há ${min} min` : min < 1440 ? `há ${Math.floor(min / 60)} h` : `há ${Math.floor(min / 1440)} dia(s)`;
     $('#stxt').textContent = 'Pedidos sincronizados ' + txt; $('#sti').style.background = min != null && min <= 20 ? 'var(--ok)' : min != null && min <= 120 ? 'var(--warn)' : 'var(--bad)';
-    $('#coleta').title = 'A coleta de pedidos roda a cada 5 minutos. Se o horário ficar antigo, confira se o ML Dashboard está ligado e se os tokens estão sendo renovados.';
+    $('#coleta').title = 'A coleta de pedidos roda a cada 5 minutos. Se o horário ficar antigo, confira se o Nexus_ está ligado e se os tokens estão sendo renovados.';
     $('#coleta').classList.toggle('velho', !(min != null && min <= 120));
   } catch { $('#stxt').textContent = 'status da coleta indisponível'; }
 }
