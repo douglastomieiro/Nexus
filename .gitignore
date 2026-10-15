@@ -1,0 +1,34 @@
+# Segredos (nunca versionar)
+.env
+.env.*
+!.env.example
+tokens*.json
+*.pem
+
+# Dados de runtime (banco, coletas, dados pessoais de compradores)
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Backups e quarentena (podem conter segredos e dados pessoais)
+backup-*/
+_quarentena/
+*.bak
+*.tmp
+
+# Relatórios de segurança (mapa de vulnerabilidades: não versionar)
+AUDITORIA.md
+RELATORIO-*.md
+
+# Outros
+video-frames/
+node_modules/
+*.log
+
+# App empacotado (electron-builder)
+dist/
+dist-*/
+
+# Configuração de quem gera o instalador (endereço do intermediário): fica fora do git
+app-config.json

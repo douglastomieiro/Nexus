@@ -1,0 +1,10 @@
+name = "ml-dashboard-login"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# ID do app criado no DevCenter do Mercado Livre (público).
+ML_CLIENT_ID = ""
+
+# A senha do app NÃO fica aqui. Grave-a como secret:
+#   npx wrangler secret put ML_CLIENT_SECRET

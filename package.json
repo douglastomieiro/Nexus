@@ -1,0 +1,60 @@
+{
+  "name": "ml-dashboard",
+  "productName": "ML Dashboard",
+  "version": "0.1.2",
+  "description": "Lucro real por pedido para vendedores do Mercado Livre e da Shopee. Dados só no seu computador.",
+  "author": "ML Dashboard contributors",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "type": "module",
+  "main": "desktop/main.js",
+  "scripts": {
+    "start": "node start.js",
+    "test": "node test/login.test.mjs",
+    "app": "electron .",
+    "pack": "electron-builder --win dir",
+    "dist": "electron-builder --win nsis",
+    "docs": "node scripts/01-scrape-docs.mjs",
+    "probe": "node scripts/02-probe.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "chart.js": "4.4.1",
+    "express": "^5.3.0",
+    "node-cron": "^4.6.0"
+  },
+  "devDependencies": {
+    "cheerio": "^1.2.0",
+    "electron": "44.7.2",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "io.github.mldashboard",
+    "productName": "ML Dashboard",
+    "npmRebuild": false,
+    "files": [
+      "desktop/**",
+      "server/**",
+      "web/**",
+      "app-config.json",
+      ".env.example",
+      "LICENSE",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist/${version}"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

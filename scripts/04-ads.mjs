@@ -1,0 +1,11 @@
+import { mlGet } from '../server/ml.js';
+const loja = process.argv[2] || 'loja1';
+const H = { 'Api-Version': '2' };
+const show = async (p, h = H) => { const r = await mlGet(loja, p, { headers: h, retries: 0 }); console.log(r.status, p, JSON.stringify(r.body).slice(0, 700)); return r.body; };
+const adv = await show('/advertising/advertisers?product_id=PADS', { 'Api-Version': '1' });
+const id = adv?.advertisers?.[0]?.advertiser_id;
+const to = new Date().toISOString().slice(0, 10), from = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+const m = 'clicks,prints,cost,cpc,acos,roas,units_quantity,total_amount,direct_amount,indirect_amount,organic_units_quantity,organic_units_amount';
+await show(`/advertising/MLB/advertisers/${id}/product_ads/campaigns/search?limit=5&offset=0&date_from=${from}&date_to=${to}&metrics=${m}`);
+await show(`/advertising/MLB/advertisers/${id}/product_ads/ads/search?limit=3&offset=0&date_from=${from}&date_to=${to}&metrics=${m}`);
+await show(`/advertising/MLB/product_ads/campaigns/search?advertiser_id=${id}&limit=3`);

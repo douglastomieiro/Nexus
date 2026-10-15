@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Dashboard</title>
+<script src="vendor/chart.umd.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f4f6fb;--panel:#fff;--panel2:#f3f6fc;--bd:#e4e9f2;--tx:#1e293b;--mut:#64748b;--ac:#2563eb;--ac2:#eaf0ff;--ok:#16a34a;--bad:#dc2626;--warn:#d97706;--l1:#2563eb;--l2:#ea580c;--sh:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.04)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:13.5px/1.45 Inter,system-ui,Segoe UI,sans-serif;display:flex;min-height:100vh;-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}::-webkit-scrollbar-track{background:transparent}
+
+/* ── sidebar ── */
+nav{width:60px;background:#fff;border-right:1px solid var(--bd);padding:18px 10px;position:fixed;left:0;top:0;height:100vh;z-index:20;display:flex;flex-direction:column;overflow:hidden;white-space:nowrap;transition:width .2s ease,box-shadow .2s ease}
+nav:hover{width:232px;padding:18px 12px;box-shadow:12px 0 32px rgba(15,23,42,.16);overflow:auto}
+body.pin nav{width:232px;padding:18px 12px;box-shadow:none;overflow:auto}
+nav:not(:hover) .user,nav:not(:hover) .pinsw,nav:not(:hover) .foot{opacity:0;pointer-events:none}
+body.pin nav .user,body.pin nav .pinsw,body.pin nav .foot{opacity:1;pointer-events:auto}
+nav .user,nav .pinsw,nav .foot{transition:opacity .15s}
+nav a span,nav .brand span,nav a .tag{transition:opacity .12s}
+body:not(.pin) nav:not(:hover) a span,body:not(.pin) nav:not(:hover) .brand span,body:not(.pin) nav:not(:hover) a .tag{opacity:0}
+body:not(.pin) nav:not(:hover) .user,body:not(.pin) nav:not(:hover) .pinsw,body:not(.pin) nav:not(:hover) .foot{opacity:0}
+body.pin main{margin-left:232px}
+main{margin-left:60px;transition:margin-left .2s ease}
+.pinsw{display:flex;align-items:center;gap:8px;margin:0 4px 12px;padding:7px 10px;border:1px solid var(--bd);border-radius:10px;font-size:12px;color:#475569;cursor:pointer;user-select:none}
+.pinsw input{display:none}.pinsw .sw{margin-left:auto;width:30px;height:17px;border-radius:99px;background:#cbd5e1;position:relative;transition:background .15s;flex-shrink:0}
+.pinsw .sw::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;transition:transform .15s}
+.pinsw input:checked+.sw{background:var(--ac)}.pinsw input:checked+.sw::after{transform:translateX(13px)}
+.brand{display:flex;align-items:center;gap:9px;padding:2px 8px 16px;font-weight:700;font-size:18px;letter-spacing:-.02em;color:#0f172a}
+.brand i{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#2563eb,#4f46e5);color:#fff;display:grid;place-items:center;font:700 13px Inter,sans-serif;font-style:normal;letter-spacing:0}
+.brand small{font-weight:500;color:var(--mut);font-size:18px}
+.user{display:flex;align-items:center;gap:10px;margin:0 4px 14px;padding:10px;border:1px solid var(--bd);border-radius:12px;background:#fafbfe}
+.user b{width:32px;height:32px;border-radius:50%;background:var(--ac2);color:var(--ac);display:grid;place-items:center;font-size:12px}
+.user span{display:block;font-weight:600;font-size:12.5px;line-height:1.2}.user small{color:var(--mut);font-size:11px}
+#menu{flex:1}
+nav a{display:flex;align-items:center;gap:10px;padding:8px 10px;margin:1px 0;border-radius:8px;color:#475569;cursor:pointer;font-weight:500;font-size:13px;text-decoration:none}
+nav a svg{width:16px;height:16px;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;opacity:.85}
+nav a:hover{background:#f1f5f9;color:#0f172a}
+nav a.on{background:var(--ac2);color:var(--ac);font-weight:600}
+nav a .tag{margin-left:auto;padding:0 7px;font-size:11px;line-height:18px}
+.sep{height:1px;background:var(--bd);margin:8px 6px}
+.foot{padding:12px 6px 0;font-size:11px;color:var(--mut);border-top:1px solid var(--bd);margin-top:8px}
+.foot>b{display:block;letter-spacing:.07em;font-size:10px;margin:0 4px 6px}
+.vr{display:flex;gap:8px;align-items:center;padding:6px 4px;border-radius:8px}.vr:hover{background:#f1f5f9}
+.vr i{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.vr div{min-width:0;flex:1}.vr span{display:block;color:#334155;font-size:11.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vr small{color:var(--mut);font-size:10.5px}.vr em{font-style:normal;font-weight:600;color:#0f172a;font-size:11.5px;white-space:nowrap}
+
+/* ── cabeçalho / filtros ── */
+main{flex:1;padding:18px 26px 40px;min-width:0}
+.ph{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--bd);border-radius:14px;padding:12px 16px;margin-bottom:14px;box-shadow:var(--sh)}
+.ph .ico{width:34px;height:34px;border-radius:10px;background:var(--ac2);color:var(--ac);display:grid;place-items:center;flex-shrink:0}
+.ph .ico svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.ph h2{margin:0;font-size:15px;font-weight:700;line-height:1.2}.ph small{color:var(--mut);font-size:11.5px}
+.ph .tx{flex:1;min-width:0}
+.ph .st{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--mut);border:1px solid var(--bd);border-radius:99px;padding:5px 11px;cursor:help;white-space:nowrap}.ph .st i{width:7px;height:7px;border-radius:50%;background:#cbd5e1;display:inline-block}.ph .st.velho{background:#fff5f5;border-color:#fecaca;color:#b91c1c}
+.fnota{color:var(--mut);font-size:11.5px;align-self:center}
+.flt{background:#fff;border:1px solid var(--bd);border-radius:14px;padding:12px 16px 14px;margin-bottom:16px;box-shadow:var(--sh)}
+.flt h4{margin:0 0 8px;font-size:12px;font-weight:600;color:var(--mut);display:flex;align-items:center;gap:6px}
+.flt .row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.flt label{display:flex;flex-direction:column;gap:4px;font-size:10px;font-weight:600;letter-spacing:.05em;color:var(--mut);text-transform:uppercase;min-width:170px}
+.flt label select{text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)}
+
+/* ── sub-abas ── */
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:-2px 0 14px;padding:4px;background:#fff;border:1px solid var(--bd);border-radius:12px;box-shadow:var(--sh);width:fit-content;max-width:100%}
+.tabs:empty{display:none}
+.tabs a{display:flex;align-items:center;gap:7px;padding:7px 14px;border-radius:9px;color:#475569;font-weight:500;font-size:12.5px;text-decoration:none;white-space:nowrap}
+.tabs a svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.tabs a:hover{background:#f1f5f9;color:#0f172a}
+.tabs a.on{background:var(--ac);color:#fff;font-weight:600;box-shadow:0 2px 6px rgba(37,99,235,.3)}
+
+/* ── DRE (estilo Jodda): meses em colunas, seções escuras ── */
+.tw.dre{max-height:none;border:1px solid var(--bd);border-radius:10px}
+#tdre{font-size:12px;border-collapse:separate;border-spacing:0;min-width:900px}
+#tdre th{background:#0f172a;color:#e2e8f0;border-bottom:0;padding:10px 12px;position:sticky;top:0;cursor:default;z-index:2}
+#tdre th:hover{color:#e2e8f0}
+#tdre td{padding:8px 12px;border-bottom:1px solid #eef1f6;white-space:nowrap}
+#tdre td.lb,#tdre th:first-child{position:sticky;left:0;background:#fff;z-index:1;min-width:250px;font-weight:500;border-right:1px solid var(--bd)}
+#tdre th:first-child{background:#0f172a;z-index:3;border-right:0}
+#tdre tr.sec td{background:#0f172a;color:#fff;font-weight:700;font-size:10.5px;letter-spacing:.08em;padding:7px 12px;position:static}
+#tdre tr.sub td{background:#eef4ff;font-weight:700;color:#1e3a8a}#tdre tr.sub td.lb{background:#eef4ff}
+#tdre tr.tot td{background:#fef9c3;font-weight:700;color:#713f12;border-top:1px solid #fde047;border-bottom:1px solid #fde047}#tdre tr.tot td.lb{background:#fef9c3}
+#tdre tr.eq td{background:#fafbfe;color:var(--mut)}#tdre tr.eq td.lb{background:#fafbfe}
+#tdre td:last-child{border-left:1px solid var(--bd);font-weight:600}
+#tdre tbody tr:not(.sec):hover td{background:#f8faff}#tdre tr.sub:hover td,#tdre tr.tot:hover td{filter:brightness(.98)}
+
+/* ── controles ── */
+.bar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+select,input:not([type=checkbox]):not([type=radio]),textarea{background:#fff;color:var(--tx);border:1px solid #d9dfeb;border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;outline:none;transition:border-color .12s,box-shadow .12s}
+select:focus,input:focus,textarea:focus{border-color:#93b4ff;box-shadow:0 0 0 3px #2563eb1f}
+input[type=checkbox],input[type=radio]{accent-color:var(--ac)}
+button{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:8px 16px;font:600 13px Inter,sans-serif;cursor:pointer;transition:filter .12s}
+button:hover{filter:brightness(1.08)}
+.btn-ref{display:inline-flex;align-items:center;gap:6px}
+
+#view>.bar{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:12px 14px;box-shadow:var(--sh)}
+#view>.bar input:not([type=checkbox]){min-width:200px}
+#view>.bar label{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:12.5px}
+.box>.bar{margin-bottom:12px}
+.box td img{box-shadow:0 0 0 1px var(--bd)}
+.box>p{color:var(--mut)}
+
+/* ── cards ── */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px}
+.card,.box{background:var(--panel);border:1px solid var(--bd);border-radius:12px;padding:14px 16px;box-shadow:var(--sh)}
+.cards .card{border-top:3px solid #3b82f6}
+.cards .card:nth-child(5n+2){border-top-color:#f59e0b}.cards .card:nth-child(5n+3){border-top-color:#8b5cf6}
+.cards .card:nth-child(5n+4){border-top-color:#22c55e}.cards .card:nth-child(5n+5){border-top-color:#ef4444}
+.card .l{color:var(--mut);font-size:10.5px;font-weight:600;letter-spacing:.045em;text-transform:uppercase}
+.card .v{font-size:22px;font-weight:700;margin-top:6px;letter-spacing:-.02em;color:#0f172a}
+.card .v.ok{color:var(--ok)}.card .v.bad{color:var(--bad)}.card .v.warn{color:var(--warn)}
+.card.cl{cursor:pointer;transition:.15s}.card.cl:hover{box-shadow:0 4px 14px rgba(37,99,235,.14);transform:translateY(-1px)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px;margin-bottom:14px}
+.box h3{margin:0 0 12px;font-size:13.5px;color:#0f172a;font-weight:700}.box h3 small{font-weight:400;color:var(--mut)}
+
+/* ── tabelas ── */
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #eef1f6;vertical-align:top}
+th{color:var(--mut);font-size:10.5px;font-weight:600;letter-spacing:.045em;text-transform:uppercase;position:sticky;top:0;background:#fff;cursor:pointer;white-space:nowrap;z-index:1}
+th:hover{color:var(--ac)}
+tbody tr:hover td{background:#f8faff}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}.tw{max-height:560px;overflow:auto;border-radius:8px}
+.tag{display:inline-block;padding:1px 9px;border-radius:99px;font-size:11.5px;font-weight:500;background:#eef2f7;color:#475569}
+.tag.ok{background:#dcfce7;color:#15803d}.tag.bad{background:#fee2e2;color:#b91c1c}.tag.warn{background:#fef3c7;color:#b45309}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+a.lk{color:var(--l1);text-decoration:none}a.lk:hover{text-decoration:underline}
+code{background:#eef2ff;color:#3730a3;padding:1px 5px;border-radius:4px;font-size:12px}
+pre{background:#f1f5f9;color:#1e293b;padding:12px;border-radius:8px;overflow:auto;max-height:600px;font-size:12px}
+details summary{cursor:pointer}hr{border:0;border-top:1px solid var(--bd)}
+
+/* ── painel lateral ── */
+#dw{position:fixed;top:0;right:0;width:min(660px,100%);height:100vh;background:#fff;border-left:1px solid var(--bd);box-shadow:-12px 0 40px rgba(15,23,42,.14);transform:translateX(105%);transition:.2s;z-index:9;display:flex;flex-direction:column}
+#dw.on{transform:none}#dw header{padding:14px 18px;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center;font-size:15px}
+#dw .bd{overflow:auto;padding:14px 18px;flex:1}#dw details{margin-bottom:8px}#dw summary{color:var(--ac);padding:4px 0;font-weight:500}#dw pre{max-height:none}
+#dw .exp{background:#f8faff;border:1px solid #e3eaff;border-left:3px solid var(--ac);border-radius:8px;padding:10px 12px;margin:0 0 10px}
+#dw .exp b.h{display:block;color:var(--ac);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+
+@media(max-width:860px){body{flex-direction:column}main,body.pin main{margin-left:0}nav,body.pin nav,nav:hover{width:auto;height:auto;position:static;flex-direction:column;overflow:visible;box-shadow:none}.pinsw{display:none}#menu{display:flex;flex-wrap:wrap;gap:4px}.sep,.foot,.user{display:none}.grid{grid-template-columns:1fr}main{padding:14px}}
+</style>
+<link rel="stylesheet" href="jodda.css">
+</head>
+<body>
+<nav>
+  <div class="brand"><i>ML</i><span>ML<small>.dash</small></span></div>
+  <div class="user"><b id="uav">ML</b><div><span>Mercado Livre</span><small id="usub">Lucro real por pedido</small></div></div>
+  <label class="pinsw" title="Mantém o menu sempre visível"><span>Fixar menu</span><input type="checkbox" id="pinmenu"><span class="sw"></span></label>
+  <div id="menu"></div>
+  <div class="foot"><b>VENDAS RECENTES</b><div id="vrec"><small>carregando…</small></div></div>
+</nav>
+<main>
+  <div class="ph"><div class="ico" id="hico"></div><div class="tx"><h2 id="titulo"></h2><small id="sub"></small></div><div class="st" id="coleta" title=""><i id="sti"></i><span id="stxt">verificando coleta…</span></div></div>
+  <div id="tabs" class="tabs"></div>
+  <div class="flt"><h4><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54z"/></svg>Filtros</h4>
+    <div class="row">
+      <label>Loja<select id="loja"><option value="all">Todas as lojas</option></select></label>
+      <label id="fper">Período<select id="dias"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="90">90 dias</option><option value="180">180 dias</option><option value="365">12 meses</option></select></label>
+      <button id="atualiza" class="btn-ref"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Atualizar</button>
+      <span id="fnota" class="fnota"></span>
+    </div>
+  </div>
+  <div id="view"></div>
+</main>
+<div id="dw"><header><b id="dt"></b><a class="lk" href="#" onclick="fecha();return false">fechar ✕</a></header><div class="bd" id="db"></div></div>
+<script>
+const $ = s => document.querySelector(s);
+(() => { const c = $('#pinmenu'); let p = false;
+  try { p = localStorage.getItem('menuFixo') === '1'; } catch {}
+  c.checked = p; document.body.classList.toggle('pin', p);
+  c.addEventListener('change', () => { document.body.classList.toggle('pin', c.checked); try { localStorage.setItem('menuFixo', c.checked ? '1' : '0'); } catch {} });
+})();
+const brl = n => (n ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const num = n => (n ?? 0).toLocaleString('pt-BR');
+const dt = s => s ? new Date(s).toLocaleString('pt-BR') : '';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// Cor de loja<n> = n-ésima da paleta (as lojas vêm do .env: TOKENS_LOJA<n>)
+const PAL_LOJA = ['#4da3ff', '#ff8a4d', '#22c55e', '#a855f7', '#eab308', '#ec4899', '#14b8a6', '#64748b'];
+const COR = new Proxy({}, { get: (_, l) => PAL_LOJA[(parseInt(String(l).replace('loja', '')) - 1) % PAL_LOJA.length] });
+let LOJAS = {}, charts = [];
+// Link que abre o painel lateral com o detalhe AO VIVO da API (sob demanda)
+// Clique no ID → abre a página no Mercado Livre (nova aba). O pequeno "{ }" ao lado abre o retorno bruto da API (para conferência técnica).
+// `go` = id do pedido usado na página do ML quando o registro é envio ou reclamação (eles são vistos dentro do pedido).
+const mlUrl = (t, i, go) => ({
+  order: `https://www.mercadolivre.com.br/vendas/${i}/detalhe`,
+  shipment: go ? `https://www.mercadolivre.com.br/vendas/${go}/detalhe` : null,
+  claim: go ? `https://www.mercadolivre.com.br/vendas/${go}/detalhe` : null,
+  item: `https://produto.mercadolivre.com.br/MLB-${String(i).replace(/\D/g, '')}-_JM`,
+  pack: `https://www.mercadolivre.com.br/vendas/${i}/detalhe`,
+}[t]);
+const lv = (t, i, l, go) => { if (!i) return ''; const u = mlUrl(t, i, go);
+  return `${u ? `<a class="lk" target="_blank" rel="noopener" href="${u}" title="Abrir no Mercado Livre">${i}</a>` : esc(i)} <a class="lk lv" href="#" data-t="${t}" data-i="${i}" data-l="${l}" title="Ver retorno da API" style="color:var(--mut);font-size:11px">{ }</a>`; };
+const fecha = () => $('#dw').classList.remove('on');
+document.addEventListener('click', async e => {
+  const a = e.target.closest('a.lv'); if (!a) return; e.preventDefault();
+  $('#dt').textContent = `${a.dataset.t} ${a.dataset.i} · ${LOJAS[a.dataset.l]}`;
+  $('#db').innerHTML = '<p style="color:var(--mut)">Consultando a API do ML…</p>'; $('#dw').classList.add('on');
+  const d = await fetch(`api/live?tipo=${a.dataset.t}&id=${a.dataset.i}&loja=${a.dataset.l}`).then(r => r.json());
+  $('#db').innerHTML = Object.entries(d).map(([k, v], n) => `<details ${n < 2 ? 'open' : ''}><summary>${esc(k)}${v?._status ? ` <span class="bad">(${v._status})</span>` : ''}</summary><pre>${esc(JSON.stringify(v, null, 2))}</pre></details>`).join('');
+});
+const qs = () => `loja=${$('#loja').value}&dias=${$('#dias').value}`;
+// NAV muda a cada troca de tela: a resposta de uma tela antiga é descartada (antes ela podia sobrescrever a tela nova)
+let NAV = 0; const STALE = { stale: true };
+const getJ = url => { const id = NAV; return fetch(url).then(async r => { const j = await r.json().catch(() => ({ erro: `resposta inválida do servidor (HTTP ${r.status})` })); if (id !== NAV) throw STALE; if (!r.ok || (j && j.erro && !Array.isArray(j))) throw new Error(j.erro || `HTTP ${r.status}`); return j; }); };
+const api = (p, extra = '') => getJ(`api/${p}${p.includes('?') ? '&' : '?'}${qs()}${extra}`);
+const mk = (id, cfg) => { const el = $(id); if (!el) return null; const c = new Chart(el, cfg); charts.push(c); return c; };
+Chart.defaults.font.family = 'Inter, system-ui, sans-serif'; Chart.defaults.font.size = 11.5; Chart.defaults.color = '#64748b'; Chart.defaults.elements.bar.borderRadius = 4;
+const ch = { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#64748b', usePointStyle: true, boxWidth: 8 } } }, scales: { x: { ticks: { color: '#64748b' }, grid: { color: '#eef1f6' } }, y: { ticks: { color: '#64748b' }, grid: { color: '#eef1f6' } } } };
+const tbl = (cols, rows, id = '') => `<div class="tw"><table ${id ? `id="${id}"` : ''}><thead><tr>${cols.map(c => `<th class="${c.n ? 'n' : ''}">${c.t}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${cols.map(c => `<td class="${c.n ? 'n' : ''}">${c.f ? c.f(r) : esc(r[c.k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+const ln = r => `<span class="tag" style="color:${COR[r.loja]}">${esc(LOJAS[r.loja] || r.loja)}</span>`;
+const stTag = s => `<span class="tag ${/paid|active|delivered|closed|opened|answered|ANSWERED/.test(s) ? 'ok' : /cancel|paused|not_delivered|UNANSWERED|under_review/.test(s) ? 'warn' : ''}">${esc(s)}</span>`;
+function sortable(tid) { const t = $(tid); if (!t) return; t.querySelectorAll('th').forEach((th, i) => th.onclick = () => { const rows = [...t.tBodies[0].rows]; const dir = th.dataset.d = th.dataset.d === 'a' ? 'd' : 'a';
+  // ordena datas dd/mm/aaaa, hh:mm:ss como data, e "R$ 1.234,56", "12,3%", "−R$ 5,00" como número (antes datas e % eram comparados como texto)
+  const v = r => { const s = r.cells[i].innerText.trim(), d =s.match(/^(\d{2})\/(\d{2})\/(\d{4}),? ?(\d{2}:\d{2}(:\d{2})?)?/);
+    if (d) return Date.parse(`${d[3]}-${d[2]}-${d[1]}T${d[4] || '00:00'}`);
+    const x = s.split('\n')[0].replace(/^[−–]/, '-').replace(/[R$\s.%]/g, '').replace(',', '.'); return isNaN(x) || x === '' ? s : +x; };
+  rows.sort((a, b) => { const x = v(a), y = v(b); return (x > y ? 1 : x < y ? -1 : 0) * (dir === 'a' ? 1 : -1); }); rows.forEach(r => t.tBodies[0].appendChild(r)); }); }
+
+const VIEWS = {
+  async visao() {
+    const d = await api('resumo');
+    const dias = [...new Set(d.diario.map(x => x.dia))].sort();
+    const lj = [...new Set(d.diario.map(x => x.loja))];
+    $('#view').innerHTML = `<div class="cards">
+      <div class="card"><div class="l">Faturamento</div><div class="v">${brl(d.faturamento)}</div></div>
+      <div class="card"><div class="l">Pedidos</div><div class="v">${num(d.pedidos)}</div></div>
+      <div class="card"><div class="l">Ticket médio</div><div class="v">${brl(d.pedidos ? d.faturamento / d.pedidos : 0)}</div></div>
+      <div class="card"><div class="l">Unidades</div><div class="v">${num(d.unidades)}</div></div>
+      <div class="card"><div class="l">Tarifas de venda</div><div class="v">${brl(d.tarifas)}</div></div>
+      <div class="card"><div class="l">Cancelados</div><div class="v bad">${num(d.cancelados)}</div></div></div>
+      <div class="grid"><div class="box" style="grid-column:1/-1"><h3>Faturamento por dia</h3><div style="height:280px"><canvas id="c1"></canvas></div></div></div>
+      <div class="grid"><div class="box"><h3>Top 15 anúncios por faturamento</h3>${tbl([{ t: 'Anúncio', f: r => `${esc(r.titulo)}<br><small style="color:var(--mut)">${r.id}</small>` }, { t: 'Un.', n: 1, f: r => num(r.unidades) }, { t: 'Valor', n: 1, f: r => brl(r.valor) }], d.top)}</div>
+      <div class="box"><h3>Formas de pagamento</h3>${tbl([{ t: 'Tipo', k: 'tipo' }, { t: 'Qtd', n: 1, f: r => num(r.n) }, { t: 'Valor', n: 1, f: r => brl(r.valor) }], d.pagamento)}</div></div>`;
+    mk('#c1', { type: 'bar', data: { labels: dias, datasets: lj.map(l => ({ label: LOJAS[l], backgroundColor: COR[l], data: dias.map(x => d.diario.find(y => y.dia === x && y.loja === l)?.valor || 0) })) },
+      options: { ...ch, scales: { x: { ...ch.scales.x, stacked: true }, y: { ...ch.scales.y, stacked: true } } } });
+  },
+  async pedidos() {
+    $('#view').innerHTML = `<div class="bar"><input id="busca" placeholder="Buscar (comprador, título, id...)" style="flex:1"><select id="st"><option value="">Todos status</option><option>paid</option><option>cancelled</option><option>confirmed</option></select></div><div class="box" id="lista"></div>`;
+    const load = async () => { const r = await api('pedidos', `&limit=300&q=${encodeURIComponent($('#busca').value)}&status=${$('#st').value}`);
+      $('#lista').innerHTML = `<h3>${r.length} pedidos (máx. 300)</h3>` + tbl([{ t: 'Data', f: r => dt(r.data) }, { t: 'Loja', f: ln }, { t: 'Pedido', f: r => lv('order', r.id, r.loja) }, { t: 'Envio', f: r => lv('shipment', r.envio, r.loja, r.id) }, { t: 'Status', f: r => stTag(r.status) }, { t: 'Comprador', k: 'comprador' }, { t: 'Itens', k: 'itens' }, { t: 'Total', n: 1, f: r => brl(r.total) }], r, 'tp'); sortable('#tp'); };
+    $('#busca').oninput = (() => { let t; return () => { clearTimeout(t); t = setTimeout(load, 350); }; })(); $('#st').onchange = load; load();
+  },
+  async itens() {
+    const r = await api('itens');
+    const ativos = r.filter(x => x.status === 'active');
+    $('#view').innerHTML = `<div class="cards"><div class="card"><div class="l">Anúncios</div><div class="v">${num(r.length)}</div></div><div class="card"><div class="l">Ativos</div><div class="v ok">${num(ativos.length)}</div></div>
+      <div class="card"><div class="l">Pausados</div><div class="v warn">${num(r.filter(x => x.status === 'paused').length)}</div></div>
+      <div class="card"><div class="l">Sem estoque (ativos)</div><div class="v bad">${num(ativos.filter(x => !x.estoque).length)}</div></div>
+      <div class="card"><div class="l">Estoque baixo (ativos ≤ 10 un.)</div><div class="v warn">${num(ativos.filter(x => x.estoque > 0 && x.estoque <= 10).length)}</div></div></div>
+      <div class="box"><input id="busca" placeholder="Filtrar..." style="width:100%;margin-bottom:10px"><div id="lista"></div></div>`;
+    const draw = () => { const f = $('#busca').value.toLowerCase(); const rows = r.filter(x => !f || (x.titulo + x.id + x.status).toLowerCase().includes(f));
+      $('#lista').innerHTML = tbl([{ t: '', f: x => `<img src="${esc(x.img)}" width="40" height="40" style="border-radius:6px;object-fit:cover">` }, { t: 'Loja', f: ln }, { t: 'Anúncio', f: x => `<a class="lk" target="_blank" href="${esc(x.link)}">${esc(x.titulo)}</a><br><small style="color:var(--mut)">${lv('item', x.id, x.loja)} · ${esc(x.tipo)} · ${esc(x.logistica || '')}${x.catalogo ? ' · catálogo' : ''}</small>` },
+        { t: 'Status', f: x => stTag(x.status) }, { t: 'Preço', n: 1, f: x => brl(x.preco) }, { t: 'Estoque', n: 1, f: x => estPill(x.estoque) }, { t: 'Vend. total', n: 1, f: x => num(x.vendidos) }, { t: 'Un. 90d', n: 1, f: x => num(x.vendidos90) }, { t: 'Pedidos 90d', n: 1, f: x => num(x.pedidos90) }, { t: 'Visitas 90d', n: 1, f: x => num(x.visitas90) },
+        { t: 'Conv. 90d (pedidos ÷ visitas)', n: 1, f: x => x.visitas90 ? (100 * (x.pedidos90 || 0) / x.visitas90).toFixed(1).replace('.', ',') + '%' : '' }, { t: 'Saúde', n: 1, f: x => x.saude != null ? pill(Math.round(x.saude * 100) + '%', x.saude >= 0.8 ? 'ok' : x.saude >= 0.5 ? 'warn' : 'bad') : '' }], rows, 'ti'); sortable('#ti'); };
+    $('#busca').oninput = draw; draw();
+  },
+  async atendimento() {
+    const d = await api('atendimento');
+    const nl = d.naoLidas.map(x => `${LOJAS[x.loja]}: ${num(x.results?.reduce?.((s, y) => s + (y.count || 0), 0) ?? x.total ?? 0)}`).join(' · ');
+    $('#view').innerHTML = `<div class="cards">${d.perguntas.map(p => `<div class="card"><div class="l">Perguntas ${esc(p.status)}</div><div class="v">${num(p.n)}</div></div>`).join('')}<div class="card"><div class="l">Mensagens não lidas</div><div class="v">${esc(nl || '—')}</div></div></div>
+      <div class="grid"><div class="box"><h3>Reclamações por status / etapa / tipo</h3>${tbl([{ t: 'Status', f: r => stTag(r.status) }, { t: 'Etapa', k: 'etapa' }, { t: 'Tipo', k: 'tipo' }, { t: 'Qtd', n: 1, f: r => num(r.n) }], d.reclamacoes)}</div>
+      <div class="box"><h3>Reclamações recentes</h3>${tbl([{ t: 'Data', f: r => dt(r.data) }, { t: 'Loja', f: ln }, { t: 'ID', f: r => lv('claim', r.id, r.loja, r.pedido) }, { t: 'Status', f: r => stTag(r.status) }, { t: 'Motivo', k: 'motivo' }, { t: 'Pedido', f: r => lv('order', r.pedido, r.loja) }], d.reclamacoesLista)}</div></div>
+      <div class="box"><h3>Perguntas recentes</h3>${tbl([{ t: 'Data', f: r => dt(r.data) }, { t: 'Loja', f: ln }, { t: 'Status', f: r => stTag(r.status) }, { t: 'Pergunta', k: 'texto' }, { t: 'Resposta', k: 'resposta' }, { t: 'Anúncio', f: r => lv('item', r.item, r.loja) }], d.perguntasRecentes)}</div>`;
+  },
+  async reputacao() {
+    const d = await api('reputacao');
+    $('#view').innerHTML = `<div class="grid">${d.map(u => { const m = u.nivel?.metrics || {}; const p = x => x ? (x.rate * 100).toFixed(2) + '% (' + x.value + ')' : '—';
+      return `<div class="box"><h3>${esc(u.nome)} · ${esc(u.nickname)}</h3><div class="cards"><div class="card"><div class="l">Nível</div><div class="v">${esc(u.nivel?.level_id || '—')}</div></div>
+      <div class="card"><div class="l">MercadoLíder</div><div class="v">${esc(u.nivel?.power_seller_status || '—')}</div></div><div class="card"><div class="l">Vendas 60d</div><div class="v">${num(m.sales?.completed)}</div></div></div>
+      ${tbl([{ t: 'Métrica (60 dias)', k: 'a' }, { t: 'Taxa', n: 1, k: 'b' }], [{ a: 'Reclamações', b: p(m.claims) }, { a: 'Atraso no envio', b: p(m.delayed_handling_time) }, { a: 'Cancelamentos', b: p(m.cancellations) }])}
+      <p style="color:var(--mut)">Histórico: ${num(u.nivel?.transactions?.completed)} concluídas · ${num(u.nivel?.transactions?.canceled)} canceladas · positivas ${((u.nivel?.transactions?.ratings?.positive || 0) * 100).toFixed(0)}%</p></div>`; }).join('')}</div>`;
+  },
+  async envios() {
+    const d = await api('envios');
+    $('#view').innerHTML = `<div class="grid"><div class="box"><h3>Envios coletados por status / logística</h3>${tbl([{ t: 'Status', f: r => stTag(r.status) }, { t: 'Logística', k: 'logistica' }, { t: 'Qtd', n: 1, f: r => num(r.n) }], d.status)}</div>
+      <div class="box"><h3>Custos de frete (envios com detalhe)</h3>${tbl([{ t: 'Loja', f: ln }, { t: 'Envios', n: 1, f: r => num(r.n) }, { t: 'Custo vendedor', n: 1, f: r => brl(r.custo_vendedor) }, { t: 'Valor bruto', n: 1, f: r => brl(r.bruto) }], d.custos)}</div></div>
+      <p style="color:var(--mut)">Detalhes de envio (status/prazo) estão coletados para os pedidos dos últimos 90 dias; o custo de frete, para os 12 meses.</p>`;
+  },
+  async promocoes() {
+    const d = await api('promocoes');
+    $('#view').innerHTML = `<div class="grid"><div class="box"><h3>Campanhas disponíveis</h3>${tbl([{ t: 'Loja', f: ln }, { t: 'ID', k: 'id' }, { t: 'Tipo', k: 'type' }, { t: 'Status', f: r => stTag(r.status) }, { t: 'Nome', k: 'name' }, { t: 'Início', f: r => dt(r.start_date) }, { t: 'Fim', f: r => dt(r.finish_date) }, { t: 'Anúncios (por status)', f: r => Object.entries(r.itens || {}).map(([k, v]) => `<span class="tag">${esc(k)}: ${num(v)}</span>`).join(' ') }], d.lista)}</div></div>`;
+  },
+  async cobertura() {
+    const d = await api('cobertura');
+    $('#view').innerHTML = `<div class="grid"><div class="box"><h3>Dados coletados por recurso</h3>${tbl([{ t: 'Recurso', f: r => `<a class="lk" href="#raw:${r.recurso}">${esc(r.recurso)}</a>` }, { t: 'OK', n: 1, f: r => `<span class="ok">${num(r.ok)}</span>` }, { t: 'Falhas', n: 1, f: r => r.falhas ? `<span class="bad">${num(r.falhas)}</span>` : '0' }, { t: 'Última', f: r => dt(r.ultima) }], d.recursos)}</div>
+      <div class="box"><h3>Execuções do coletor</h3>${tbl([{ t: 'Quando', f: r => dt(r.fim) }, { t: 'Loja', f: ln }, { t: 'Módulo', k: 'modulo' }, { t: 'Chamadas', n: 1, f: r => num(r.chamadas) }, { t: 'Erros', n: 1, f: r => num(r.erros) }], d.coletas)}</div></div>`;
+  },
+  async raw(arg) {
+    $('#view').innerHTML = `<div class="bar"><input id="rec" placeholder="recurso (ex: order, item, claim)" value="${esc(arg || 'item')}"><input id="q" placeholder="buscar texto/id" style="flex:1"></div><div class="grid"><div class="box"><div id="lista"></div></div><div class="box"><h3>Documento</h3><pre id="doc">Clique em uma linha</pre></div></div>`;
+    const load = async () => { const r = await fetch(`api/raw/lista?recurso=${encodeURIComponent($('#rec').value)}&q=${encodeURIComponent($('#q').value)}&loja=${$('#loja').value}`).then(x => x.json());
+      $('#lista').innerHTML = tbl([{ t: 'Loja', f: ln }, { t: 'Chave', f: x => `<a class="lk" data-l="${x.loja}" data-c="${esc(x.chave)}" href="#">${esc(x.chave)}</a>` }, { t: 'Status', k: 'status' }, { t: 'KB', n: 1, f: x => (x.bytes / 1024).toFixed(1) }], r);
+      document.querySelectorAll('#lista a[data-c]').forEach(a => a.onclick = async e => { e.preventDefault(); const d = await fetch(`api/raw/doc?loja=${a.dataset.l}&recurso=${encodeURIComponent($('#rec').value)}&chave=${encodeURIComponent(a.dataset.c)}`).then(x => x.json()); $('#doc').textContent = JSON.stringify(d, null, 2); }); };
+    $('#rec').onchange = load; $('#q').oninput = (() => { let t; return () => { clearTimeout(t); t = setTimeout(load, 350); }; })(); load();
+  },
+};
+const pct = n => ((n || 0) * 100).toFixed(1).replace('.', ',') + '%';
+// pílulas de saúde / ACOS (verde bom, amarelo atenção, vermelho ruim)
+const pill = (txt, cls) => `<span class="tag ${cls}">${txt}</span>`;
+const acosPill = (custo, venda) => venda ? pill(pct(custo / venda), custo / venda < 0.1 ? 'ok' : custo / venda < 0.2 ? 'warn' : 'bad') : (custo > 0 ? pill('sem venda', custo > 5 ? 'bad' : 'warn') : '—');
+const estPill = n => n ? (n <= 10 ? pill(num(n), 'warn') : num(n)) : pill('0', 'bad');
+const corL = n => n < 0 ? 'bad' : '';
+// grava custo unitário de um SKU (campo editável)
+async function salvaCusto(inp) {
+  const v = inp.value.replace(',', '.'); inp.style.outline = '1px solid var(--warn)';
+  const r = await fetch('api/custos', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sku: inp.dataset.sku, custo: v === '' ? null : v }) }).catch(() => null);
+  inp.style.outline = r && r.ok ? '1px solid var(--ok)' : '2px solid var(--bad)'; inp.title = r && r.ok ? 'salvo' : 'não foi possível salvar (use só números)';
+}
+const campoCusto = (sku, custo) => `<input data-sku="${esc(sku)}" value="${custo ?? ''}" placeholder="R$ 0,00" inputmode="decimal" style="width:90px;text-align:right" onchange="salvaCusto(this)">`;
+// ── Detalhe dos cards da tela "Lucro real": o que é no ML, como é calculado, de onde vem e a quebra por mês / SKU ──
+// mes = campo (ou função) de d.porMes; sku = campo de d.skus; ord 'asc' = piores primeiro
+const DET = {
+  receita: { t: 'Receita', mes: 'receita', sku: 'receita',
+    ml: 'Valor bruto das vendas: o preço de venda do anúncio × a quantidade. É o que o comprador pagou pelo <b>produto</b>, antes de qualquer tarifa do ML. Não inclui o frete que o comprador paga e não inclui pedidos cancelados.',
+    calc: 'Soma de <code>unit_price × quantity</code> de cada item dos pedidos do período (fuso de Brasília). Reembolsos de pedidos que continuam válidos não são tirados aqui — entram como “devolução” dentro do cálculo do lucro.',
+    fonte: 'API de pedidos do ML (<code>orders</code> → <code>order_items[]</code>).' },
+  comissao: { t: 'Comissão ML', mes: 'comissao', sku: 'comissao',
+    ml: 'A “tarifa de venda” do Mercado Livre: percentual cobrado por venda, que varia conforme a categoria e o tipo de anúncio (Clássico/Premium). Em produtos baratos (abaixo de R$ 79) existe ainda uma tarifa fixa por faixa de preço, já embutida neste valor.',
+    calc: '<code>sale_fee × quantidade</code> de cada item. Se o pedido teve reembolso parcial, a comissão é reduzida na mesma proporção.',
+    fonte: 'Campo <code>sale_fee</code> do item no pedido. Confere com a fatura do ML (cobranças CV*). É descontada do valor que o Mercado Pago te repassa.' },
+  frete: { t: 'Frete que EU pago', mes: 'frete', sku: 'frete',
+    ml: 'A parte do frete que fica por conta do <b>vendedor</b>. O ML calcula o frete pelo peso/dimensões e pela sua reputação; o comprador paga uma parte (ou nada, no frete grátis) e o restante é descontado de você.',
+    calc: 'Custo do vendedor do envio, rateado entre os itens do envio pelo valor de cada um. Quando o custo real do envio não foi coletado, usa a <b>média por unidade</b> daquele anúncio (o pedido ganha a etiqueta “frete estimado”).',
+    fonte: 'API de envios: <code>shipments/{id}/costs</code> → soma de <code>senders[].cost</code>. Na fatura aparece como CXDE/CFFE/CFFI.' },
+  imposto: { t: 'Imposto', mes: 'imposto', sku: 'imposto', extra: 'aliq',
+    ml: 'Não é cobrado pelo ML: é o seu imposto do Simples Nacional (DAS) sobre as vendas. O ML apenas emite a NF-e em seu nome.',
+    calc: '<code>(receita − devolução + frete cobrado do comprador na NF) × alíquota efetiva do mês</code>. Alíquota efetiva = (RBT12 × alíquota nominal da faixa − parcela a deduzir) ÷ RBT12. Modo automático usa o histórico do sistema fiscal; manual usa a % digitada em Configurações.',
+    fonte: 'Alíquota informada em Configurações (por conta).' },
+  freteNF: { t: 'Frete só na NF (base do imposto)', mes: 'freteNF', fmt: 'brl',
+    ml: 'Frete que o <b>comprador</b> pagou. O ML repassa isso ao transportador: não é receita sua nem custo seu. Mas ele consta na NF-e e, por isso, entra na base de cálculo do imposto.',
+    calc: 'Soma de <code>shipping_buyer_cost</code> da NF-e autorizada de cada pedido; se não houver NF, usa o <code>receiver.cost</code> do envio. Reduzido proporcionalmente em reembolsos.',
+    fonte: 'NF-e emitida pelo ML (<code>invoice → items[].shipping_buyer_cost</code>) ou <code>shipments/{id}/costs → receiver.cost</code>.' },
+  impostoFrete: { t: 'Imposto sobre esse frete', mes: null,
+    ml: 'Quanto do imposto acima existe só porque o frete pago pelo comprador entra na NF. É um card informativo: esse valor já está dentro de “Imposto”, não é descontado de novo.',
+    calc: '<code>frete na NF × alíquota efetiva do mês</code>.',
+    fonte: 'Mesma de “Frete só na NF” e do “Imposto”.', extra: 'aliq' },
+  custo: { t: 'Custo dos produtos', mes: 'custo', sku: 'custo',
+    ml: 'Não vem do Mercado Livre: é o que você pagou pelo produto (CMV). Você informa o custo unitário por SKU na tabela da tela ou em “Custos”.',
+    calc: '<code>custo unitário × quantidade vendida</code>. Em reembolso parcial o comprador normalmente fica com o produto, então o custo só é abatido quando o reembolso corresponde a unidades inteiras devolvidas. SKU sem custo cadastrado conta como R$ 0 — por isso o lucro fica superestimado (aviso amarelo).',
+    fonte: 'Banco local (<code>custos</code>), digitado por você.' },
+  ads: { t: 'Ads (com venda)', mes: 'ads', sku: 'ads',
+    ml: 'Investimento em Product Ads (anúncios patrocinados). O ML cobra na fatura (PADS), pelos cliques/impressões, e não por venda.',
+    calc: 'Custo diário de cada anúncio ÷ unidades vendidas desse anúncio no dia × unidades de cada pedido. Ou seja, o gasto do dia é rateado entre as vendas daquele dia.',
+    fonte: 'API de Product Ads (<code>ads_item_daily</code> → <code>metrics.cost</code>). A API só entrega os últimos 90 dias.' },
+  adsSemVenda: { t: 'Ads sem venda', mes: 'adsSemVenda',
+    ml: 'Dinheiro gasto em Ads num dia em que aquele anúncio não vendeu nada. É custo real (o ML cobra do mesmo jeito), mas não dá para ligar a nenhum pedido.',
+    calc: 'Soma do custo diário de Ads de itens/dias sem nenhuma venda no período. É subtraído direto do LUCRO REAL.',
+    fonte: 'API de Product Ads (mesma do card anterior).' },
+  devolvido: { t: 'Devolvido ao comprador', lista: 'reembolsado',
+    ml: 'Dinheiro que voltou ao comprador em pedidos <b>cancelados com reembolso</b> (arrependimento, devolução, mediação, cancelamento depois do envio). Esses pedidos já ficam fora da Receita.',
+    calc: 'Soma de <code>transaction_amount_refunded</code> dos pagamentos dos pedidos cancelados com reembolso. Este valor sozinho <b>não</b> é perda: a perda real está no card “Perda com devoluções”.',
+    fonte: 'Pedidos (<code>payments[]</code>) + reclamações (<code>claims</code>) para classificar o tipo.' },
+  perdaDev: { t: 'Perda com devoluções (frete)', mes: 'perdaPura', lista: 'perda', soPositivos: true,
+    ml: 'O que o Mercado Livre cobrou de você numa venda cancelada/devolvida e <b>não cancelou</b>. A cada venda o ML cobra frete, comissão e taxas; quando o pedido é reembolsado, ele cancela (estorna) essas cobranças — total, parcial ou nada. Se o produto volta, ainda cobra a <b>tarifa de devolução</b> (frete de volta), que normalmente não é cancelada.',
+    calc: 'Para cada pedido cancelado com reembolso: <code>(frete de ida + tarifa de devolução + comissão) cobrados − cancelados</code>, lidos do extrato do pedido na fatura do ML — a mesma conta da tela “Detalhe da venda”. O parcelamento não entra (é repasse do acréscimo pago pelo comprador), exceto quando o Mercado Pago estorna o repasse mas não a taxa; a retenção <code>fee_spl</code> não estornada também conta (ambas só aparecem no pagamento do MP). <b>Vendas mantidas por cobertura</b> (<code>bpp_covered</code>: o ML pagou o reembolso ao comprador e você ficou com o líquido) não têm perda de frete/comissão e entram como ganho no LUCRO REAL. Se o custo do produto estiver ativado em Configurações, soma o custo do que não voltou.',
+    fonte: 'Extrato do pedido (<code>/billing/integration/group/ML/order/details</code>: C* cobrança, B* cancelamento) + pagamento no Mercado Pago (<code>/v1/payments/{id}</code>: quem pagou o reembolso e o que foi estornado). Coletores <code>pagamentos</code> e <code>extrato</code>, de hora em hora (o extrato é limitado a 5 consultas/min).' },
+  lucro: { t: 'LUCRO REAL', extra: 'lucro', mes: m => m.lucro - m.adsSemVenda - m.perdaDevolucao, sku: 'lucro', ord: 'asc',
+    ml: 'O que sobra de verdade no seu bolso depois de pagar tudo: comissão e frete ao ML, imposto, o custo do produto, os anúncios e as devoluções.',
+    calc: '<code>receita − devolução − comissão − frete − imposto − custo − Ads</code> por item de cada pedido; depois subtrai Ads sem venda e a perda com devoluções.',
+    fonte: 'Soma de todos os cards acima (motor em <code>server/margem.js</code>). A tabela por SKU abaixo mostra os piores primeiro.' },
+  margem: { t: 'Margem real', mes: m => m.receita ? (m.lucro - m.adsSemVenda - m.perdaDevolucao) / m.receita : 0, fmt: 'pct', sku: 'margem', ord: 'asc', skuFmt: 'pct',
+    ml: 'Quanto de cada R$ 100 vendidos vira lucro.',
+    calc: '<code>LUCRO REAL ÷ Receita</code>.',
+    fonte: 'Calculado a partir dos dois cards acima.' },
+  pedidos: { t: 'Pedidos', mes: 'pedidos', fmt: 'num',
+    ml: 'Pedidos do período que <b>não</b> foram cancelados. Um pedido pode ter vários itens.',
+    calc: 'Contagem de pedidos com status diferente de “cancelled”, pela data de criação (fuso de Brasília).',
+    fonte: 'API de pedidos do ML.' },
+  cancelados: { t: 'Cancelados', lista: 'reembolsado',
+    ml: 'Pedidos cancelados no período (pelo comprador, pelo vendedor ou pelo ML, por ex. pagamento não aprovado). Ficam fora de Receita e de todos os custos.',
+    calc: 'Contagem de pedidos com status “cancelled”. A lista abaixo mostra só os cancelados <b>com reembolso</b>, que são os que viram devolução.',
+    fonte: 'API de pedidos do ML.' },
+};
+function detCard(k) {
+  const d = window.LUCRO_D, x = DET[k], t = d.total; if (!d || !x) return;
+  const F = { brl, num, pct }, fmt = F[x.fmt || 'brl'], sf = F[x.skuFmt || 'brl'];
+  const val = { receita: brl(t.receita), comissao: '−' + brl(t.comissao), frete: '−' + brl(t.frete), imposto: '−' + brl(t.imposto), freteNF: brl(t.freteNF), impostoFrete: '−' + brl(t.impostoFrete), custo: '−' + brl(t.custo), ads: '−' + brl(t.ads), adsSemVenda: '−' + brl(t.adsSemVenda), devolvido: brl(t.devolvido), perdaDev: '−' + brl(t.perdaDevolucao), lucro: brl(t.lucroFinal), margem: pct(t.margem), pedidos: num(t.pedidos), cancelados: num(t.canceladas) }[k];
+  let h = `<div style="font-size:28px;font-weight:600;margin-bottom:10px">${val} <small style="font-size:12px;color:var(--mut);font-weight:400">${esc(d.desde)} em diante · ${esc($('#loja').selectedOptions[0].textContent)}</small></div>
+    <div class="exp"><b class="h">O que é no Mercado Livre</b>${x.ml}</div>
+    <div class="exp"><b class="h">Como este painel calcula</b>${x.calc}</div>
+    <div class="exp"><b class="h">De onde vem o dado</b>${x.fonte}</div>`;
+  if (x.extra === 'lucro') {
+    const L = [['Receita', t.receita], ['(−) Devolução parcial nos pedidos', -t.devolucao], ['(−) Comissão ML', -t.comissao], ['(−) Frete que eu pago', -t.frete], ['(−) Imposto', -t.imposto], ['(−) Custo dos produtos', -t.custo], ['(−) Ads com venda', -t.ads], ['= Lucro dos pedidos', t.lucro], ['(−) Ads sem venda', -t.adsSemVenda], ['(−) Perda com devoluções', -t.perdaDevolucao], ['(+) Vendas mantidas por cobertura do ML (líquido recebido − imposto − custo)', t.resultadoMantido], ['= LUCRO REAL', t.lucroFinal]];
+    h += `<h4 style="color:var(--mut)">Conta completa</h4>` + tbl([{ t: 'Linha', f: r => r[0].startsWith('=') ? `<b>${r[0]}</b>` : r[0] }, { t: 'Valor', n: 1, f: r => `<span class="${r[1] < 0 && r[0].startsWith('=') ? 'bad' : ''}">${brl(r[1])}</span>` }], L);
+  }
+  if (x.extra === 'aliq') {
+    const rows = Object.entries(d.aliquotasUsadas || {}).flatMap(([l, ms]) => Object.entries(ms).sort().map(([m, p]) => ({ loja: l, mes: m, p })));
+    h += `<h4 style="color:var(--mut)">Alíquota efetiva usada (${d.config.aliquota_modo === 'auto' ? 'automática, pelo DAS' : 'manual'})</h4>` + tbl([{ t: 'Loja', f: ln }, { t: 'Mês', f: r => mesNome(r.mes) }, { t: 'Alíquota', n: 1, f: r => String(r.p).replace('.', ',') + '%' }], rows);
+  }
+  if (x.mes) {
+    const g = typeof x.mes === 'function' ? x.mes : m => m[x.mes];
+    h += `<h4 style="color:var(--mut)">Por mês e loja</h4>` + tbl([{ t: 'Mês', f: r => mesNome(r.mes) }, { t: 'Loja', f: ln }, { t: 'Valor', n: 1, f: r => fmt(g(r)) }], d.porMes);
+  }
+  if (x.sku) {
+    const rows = d.skus.filter(s => k !== 'margem' || !s.semCusto).sort((a, b) => x.ord === 'asc' ? a[x.sku] - b[x.sku] : b[x.sku] - a[x.sku]).slice(0, 15);
+    h += `<h4 style="color:var(--mut)">${x.ord === 'asc' ? '15 piores SKUs' : '15 maiores SKUs'}</h4>` + tbl([{ t: 'SKU / Anúncio', f: s => `${esc(s.titulo)}<br><small style="color:var(--mut)">${esc(s.sku)}${s.anuncios > 1 ? ` · <b style="color:var(--ac)">vale para ${s.anuncios} anúncios</b>` : ''}</small>` }, { t: 'Un.', n: 1, f: s => num(s.unidades) }, { t: 'Valor', n: 1, f: s => sf(s[x.sku]) }], rows);
+  }
+  if (x.lista) {
+    let L = d.devolucoes.slice(); if (x.soPositivos) L = L.filter(r => r[x.lista] > 0.004).sort((a, b) => b[x.lista] - a[x.lista]);
+    const soma = L.reduce((t, r) => t + r[x.lista], 0);
+    h += `<h4 style="color:var(--mut)">${x.soPositivos ? `Pedidos que geraram perda (${num(L.length)} de ${num(d.devolucoes.length)} devoluções) — soma ${brl(soma)}` : `Pedidos (${num(L.length)})`}</h4>` + (x.soPositivos ? `<p style="color:var(--mut);margin:0 0 6px">Os demais pedidos reembolsados tiveram frete e tarifas estornados pelo ML (perda zero) e não aparecem aqui.</p>` : '') +
+      tbl([{ t: 'Data', f: r => dt(r.data) }, { t: 'Pedido', f: r => lv('order', r.id, r.loja) }, { t: 'Tipo', f: r => `<span class="tag">${esc(r.tipo)}</span>` }, ...(x.soPositivos ? [{ t: 'Frete cobrado/estornado', n: 1, f: r => `${brl(r.freteCobrado)} / ${brl(r.freteEstornado)}` }, { t: 'Tarifa de devolução', n: 1, f: r => brl(r.freteVolta) }, { t: 'Comissão', n: 1, f: r => brl(r.tarifasPerdidas) }] : []), { t: 'Valor', n: 1, f: r => brl(r[x.lista]) }], L);
+  }
+  $('#dt').textContent = x.t; $('#db').innerHTML = h; $('#dw').classList.add('on');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecha(); });
+const VIEWS2 = {
+  async lucro() {
+    const d = await api('lucro'), t = d.total, cb = d.cobertura;
+    const avisos = [];
+    const lojasCfg = Object.keys(d.aliquotaAuto); const autoOk = d.config.aliquota_modo === 'auto' && lojasCfg.every(l => d.aliquotaAuto[l]);
+    if (!autoOk && lojasCfg.every(l => !d.config['aliquota_' + l])) avisos.push('Alíquota do Simples Nacional não definida — o imposto está zerado. <a class="lk" href="#config">Definir</a>');
+    const infoImp = autoOk ? lojasCfg.map(l => { const u = d.aliquotasUsadas[l] || {}, ks = Object.keys(u).sort(); return ks.length ? LOJAS[l] + ': ' + String(u[ks.at(-1)]).replace('.', ',') + '%' : null; }).filter(Boolean).join(' · ') : '';
+    if (cb.pctReceitaSemCusto > 0.01) avisos.push(`${pct(cb.pctReceitaSemCusto)} da receita é de produtos <b>sem custo</b> (${cb.skusSemCusto} de ${cb.skus} SKUs) — o lucro está superestimado. Preencha abaixo ou em <a class="lk" href="#custos">Custos</a>.`);
+    if (cb.pctReceitaFreteEstimado > 0.01) avisos.push(`${pct(cb.pctReceitaFreteEstimado)} da receita com <b>frete estimado</b> (custo real do envio coletado só para os últimos 90 dias).`);
+    const dias = {}; d.diario.forEach(x => { const o = dias[x.dia] ||= { receita: 0, lucro: 0 }; o.receita += x.receita; o.lucro += x.lucro; });
+    const ks = Object.keys(dias).sort();
+    window.LUCRO_D = d;
+    const card = (k, l, v, c = '') => `<div class="card cl" onclick="detCard('${k}')" title="Clique para ver de onde vem este valor"><div class="l">${l} <span style="opacity:.6">ⓘ</span></div><div class="v ${c}">${v}</div></div>`;
+    $('#view').innerHTML = avisos.map(a => `<div class="box" style="border-color:var(--warn);margin-bottom:10px">⚠ ${a}</div>`).join('') + (infoImp ? `<div class="box" style="margin-bottom:10px">🧾 Imposto calculado pela <b>alíquota efetiva do Simples (DAS)</b> do sistema fiscal, mês a mês: ${infoImp}. <a class="lk" href="#config">detalhes</a></div>` : '') + `<div class="cards">
+      ${card('receita', 'Receita', brl(t.receita))}${card('comissao', 'Comissão ML', '−' + brl(t.comissao))}${card('frete', 'Frete que EU pago', '−' + brl(t.frete))}${card('imposto', 'Imposto', '−' + brl(t.imposto))}${card('freteNF', 'Frete só na NF (base do imposto)', brl(t.freteNF), 'warn')}${card('impostoFrete', 'Imposto sobre esse frete', '−' + brl(t.impostoFrete), 'warn')}
+      ${card('custo', 'Custo dos produtos', '−' + brl(t.custo))}${card('ads', 'Ads (com venda)', '−' + brl(t.ads))}${card('adsSemVenda', 'Ads sem venda', '−' + brl(t.adsSemVenda), 'warn')}${card('devolvido', 'Devolvido ao comprador (' + num(t.qtdDevolucoes) + ' pedidos)', brl(t.devolvido), 'bad')}${card('perdaDev', 'Perda com devoluções (frete)', '−' + brl(t.perdaDevolucao), 'bad')}
+      ${card('lucro', 'LUCRO REAL', brl(t.lucroFinal), t.lucroFinal < 0 ? 'bad' : 'ok')}${card('margem', 'Margem real', pct(t.margem), t.margem < 0 ? 'bad' : 'ok')}${card('pedidos', 'Pedidos', num(t.pedidos))}${card('cancelados', 'Cancelados', num(t.canceladas), 'bad')}</div>
+      <div class="box" style="margin-bottom:14px"><h3>Receita × lucro por dia</h3><div style="height:260px"><canvas id="c1"></canvas></div></div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+        <div class="box"><h3>Lucro acumulado no período</h3><div style="height:240px"><canvas id="c2"></canvas></div></div>
+        <div class="box"><h3>Para onde vai a receita</h3><div style="height:240px"><canvas id="c3"></canvas></div></div>
+        <div class="box"><h3>Receita por loja</h3><div style="height:240px"><canvas id="c4"></canvas></div></div></div>
+      <div class="box" style="margin-bottom:14px"><h3>Lucro por SKU <small>(edite o custo unitário direto na tabela)</small></h3>
+        <div class="bar"><input id="fs" placeholder="Filtrar SKU/título" style="flex:1"><label><input type="checkbox" id="fp"> só prejuízo</label> <label><input type="checkbox" id="fc"> só sem custo</label></div><div id="ls"></div></div>
+      <div class="box" style="margin-bottom:14px"><h3>Devoluções e cancelamentos com reembolso <small>(o valor devolvido sai da receita; a perda real vem do Mercado Pago: cobrado − estornado, de frete e tarifas${d.config.devolucao_perde_produto ? ' + custo do produto' : ''})</small></h3>
+        ${tbl([{ t: 'Data', f: r => dt(r.data) }, { t: 'Loja', f: ln }, { t: 'Pedido', f: r => lv('order', r.id, r.loja) }, { t: 'Tipo', f: r => `<span class="tag">${esc(r.tipo)}</span>` }, { t: 'Itens', k: 'itens' },
+          { t: 'Devolvido', n: 1, f: r => brl(r.reembolsado) }, { t: 'Frete cobrado', n: 1, f: r => brl(r.freteCobrado) }, { t: 'Frete estornado', n: 1, f: r => brl(r.freteEstornado) }, { t: 'Tarifa de devolução', n: 1, f: r => brl(r.freteVolta) }, { t: 'Comissão não devolvida', n: 1, f: r => brl(r.tarifasPerdidas) }, { t: 'Reembolso pago por', f: r => esc(r.reembolsoPor || '—') }, { t: 'Perda', n: 1, f: r => `<b class="${r.perda > 0 ? 'bad' : 'ok'}">${brl(r.perda)}</b>${r.aguardandoEstorno ? '<br><span class="tag warn">aguardando estorno</span>' : ''}${r.mantida ? `<br><span class="tag ${r.resultadoMantido < 0 ? 'bad' : 'ok'}" title="Líquido recebido ${brl(r.vendaMantida)} − imposto − custo = ${brl(r.resultadoMantido)}">venda mantida</span>` : ''}${r.revertida ? `<br><span class="tag warn" title="O ML cancelou a comissão e cobrou de novo. Pelo extrato você ficaria com ${brl(r.estimativaRevertida)} (antes de imposto e custo), mas a tela do ML mostra um ajuste que a API não entrega. Não contado no lucro: confira no ML.">decisão revertida — conferir</span>` : ''}` }], d.devolucoes.slice(0, 150))}</div>
+      <div class="box"><h3>Pedidos com pior resultado</h3>${tbl([{ t: 'Data', f: r => dt(r.data) }, { t: 'Loja', f: ln }, { t: 'Pedido', f: r => lv('order', r.id, r.loja) }, { t: 'Itens', k: 'itens' }, { t: 'Receita', n: 1, f: r => brl(r.receita) },
+        { t: 'Comissão', n: 1, f: r => brl(r.comissao) }, { t: 'Frete', n: 1, f: r => brl(r.frete) }, { t: 'Custo', n: 1, f: r => brl(r.custo) }, { t: 'Ads', n: 1, f: r => brl(r.ads) }, { t: 'Lucro', n: 1, f: r => `<b class="${corL(r.lucro)}">${brl(r.lucro)}</b>` }, { t: 'Obs.', f: r => r.flags.map(f => `<span class="tag">${f}</span>`).join(' ') }], d.pedidos.slice(0, 100))}</div>`;
+    mk('#c1', { type: 'bar', data: { labels: ks, datasets: [{ label: 'Receita', backgroundColor: '#4da3ff55', data: ks.map(k => dias[k].receita) }, { label: 'Lucro', backgroundColor: '#3ecf8e', data: ks.map(k => dias[k].lucro) }] }, options: ch });
+    // linha: lucro acumulado dia a dia
+    let acc = 0; const accum = ks.map(k => (acc += dias[k].lucro));
+    mk('#c2', { type: 'line', data: { labels: ks, datasets: [{ label: 'Lucro acumulado', data: accum, borderColor: '#16a34a', backgroundColor: '#16a34a22', fill: true, tension: .35, pointRadius: 0, borderWidth: 2 }] }, options: { ...ch, plugins: { ...ch.plugins, legend: { display: false } } } });
+    // rosca: destino de cada R$ 1 de receita
+    const dest = [['Custo dos produtos', t.custo, '#8b5cf6'], ['Comissão ML', t.comissao, '#f59e0b'], ['Frete', t.frete, '#3b82f6'], ['Imposto', t.imposto, '#ef4444'], ['Ads', t.ads + t.adsSemVenda, '#ec4899'], ['Perda devoluções', t.perdaDevolucao, '#94a3b8'], ['Lucro real', Math.max(t.lucroFinal, 0), '#22c55e']].filter(x => x[1] > 0);
+    const donut = { responsive: true, maintainAspectRatio: false, cutout: '64%', plugins: { legend: { position: 'right', labels: { color: '#475569', usePointStyle: true, boxWidth: 8 } }, tooltip: { callbacks: { label: c => ` ${c.label}: ${brl(c.parsed)}` } } } };
+    mk('#c3', { type: 'doughnut', data: { labels: dest.map(x => x[0]), datasets: [{ data: dest.map(x => x[1]), backgroundColor: dest.map(x => x[2]), borderWidth: 2, borderColor: '#fff' }] }, options: donut });
+    // rosca: receita por loja
+    const porLoja = {}; d.porMes.forEach(m => porLoja[m.loja] = (porLoja[m.loja] || 0) + m.receita); const lk = Object.keys(porLoja);
+    mk('#c4', { type: 'doughnut', data: { labels: lk.map(l => LOJAS[l] || l), datasets: [{ data: lk.map(l => porLoja[l]), backgroundColor: lk.map(l => COR[l] || '#94a3b8'), borderWidth: 2, borderColor: '#fff' }] }, options: donut });
+    const draw = () => { const f = $('#fs').value.toLowerCase(), p = $('#fp').checked, sc = $('#fc').checked;
+      const rows = d.skus.filter(s => (!f || (s.sku + s.titulo).toLowerCase().includes(f)) && (!p || s.lucro < 0) && (!sc || s.semCusto)).slice(0, 300);
+      $('#ls').innerHTML = tbl([{ t: 'SKU / Anúncio', f: s => `${esc(s.titulo)}<br><small style="color:var(--mut)">${esc(s.sku)}</small>` }, { t: 'Un.', n: 1, f: s => num(s.unidades) }, { t: 'Receita', n: 1, f: s => brl(s.receita) },
+        { t: 'Comissão', n: 1, f: s => brl(s.comissao) }, { t: 'Frete', n: 1, f: s => brl(s.frete) }, { t: 'Imposto', n: 1, f: s => brl(s.imposto) }, { t: 'Custo unit.', n: 1, f: s => campoCusto(s.sku, s.custoUnit) },
+        { t: 'Ads', n: 1, f: s => brl(s.ads) }, { t: 'Lucro', n: 1, f: s => `<b class="${corL(s.lucro)}">${brl(s.lucro)}</b>` }, { t: 'Margem', n: 1, f: s => `<span class="${corL(s.margem)}">${s.semCusto ? '—' : pct(s.margem)}</span>` }], rows, 'tk'); sortable('#tk'); };
+    ['#fs', '#fp', '#fc'].forEach(i => $(i).oninput = draw); draw();
+  },
+  async custos() {
+    // padrão 12 meses: o DRE usa os custos dos SKUs vendidos no ano todo (antes a tela só listava os vendidos em 90 dias)
+    const per = window.CUSTOS_DIAS || 365;
+    const r = await getJ(`api/custos?loja=${$('#loja').value}&dias=${per}`);
+    const recTot = r.reduce((t, s) => t + s.receita, 0), recCom = r.filter(s => s.custo != null).reduce((t, s) => t + s.receita, 0);
+    $('#view').innerHTML = `<div class="box"><h3>Custo unitário por SKU — salva ao sair do campo</h3>
+      <div class="bar"><input id="fs" placeholder="Filtrar" style="flex:1"><select id="cp"><option value="90">vendidos em 90 dias</option><option value="365">vendidos em 12 meses</option></select><label><input type="checkbox" id="fc"> só sem custo</label><span id="cn" style="color:var(--mut)"></span></div>
+      <details style="margin-bottom:10px"><summary class="lk" style="cursor:pointer">Colar vários custos de uma vez (planilha)</summary>
+        <p style="color:var(--mut);margin:6px 0">Uma linha por SKU: <code>SKU;custo</code> (ou SKU e custo separados por TAB, copiados do Excel). Ex.: <code>KIT-123;45,90</code></p>
+        <textarea id="lote" rows="6" style="width:100%;background:var(--panel);color:var(--tx);border:1px solid var(--bd);border-radius:6px;padding:8px;font:12px monospace"></textarea>
+        <button id="lsv" style="background:var(--ac);border:0;border-radius:6px;padding:6px 14px;font-weight:600;cursor:pointer;margin-top:6px">Salvar lote</button> <span id="lok"></span></details>
+      <div id="ls"></div></div>`;
+    $('#cp').value = String(per); $('#cp').onchange = () => { window.CUSTOS_DIAS = +$('#cp').value; go(); };
+    $('#lsv').onclick = async () => {
+      const linhas = $('#lote').value.split(/\r?\n/).map(l => l.trim()).filter(Boolean), lote = [], ruins = [];
+      for (const l of linhas) { const m = l.match(/^(.+?)[;\t]\s*R?\$?\s*([\d.,]+)\s*$/); if (!m) { ruins.push(l); continue; }
+        let v = m[2]; if (v.includes(',')) v = v.replace(/\./g, '').replace(',', '.'); // 1.234,56 → 1234.56
+        if (!Number.isFinite(+v)) { ruins.push(l); continue; } lote.push({ sku: m[1].trim(), custo: +v }); }
+      if (!lote.length) { $('#lok').className = 'bad'; $('#lok').textContent = 'Nenhuma linha válida'; return; }
+      const res = await fetch('api/custos', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(lote) }).catch(() => null);
+      $('#lok').className = res && res.ok ? 'ok' : 'bad';
+      $('#lok').textContent = res && res.ok ? `${lote.length} custo(s) salvos${ruins.length ? ` · ${ruins.length} linha(s) ignorada(s): ${ruins.slice(0, 3).join(' | ')}` : ''}` : 'Falha ao salvar';
+      if (res && res.ok) setTimeout(go, 1200);
+    };
+    const draw = () => { const f = $('#fs').value.toLowerCase(), sc = $('#fc').checked; const rows = r.filter(s => (!f || (s.sku + s.titulo).toLowerCase().includes(f)) && (!sc || s.custo == null));
+      $('#cn').textContent = `${r.filter(s => s.custo != null).length}/${r.length} SKUs com custo · ${pct(recTot ? recCom / recTot : 0)} da receita coberta`;
+      $('#ls').innerHTML = tbl([{ t: 'SKU', f: s => esc(s.sku) + (s.anuncios > 1 ? `<br><small style="color:var(--ac)">vale para ${s.anuncios} anúncios</small>` : '') }, { t: 'Anúncio', k: 'titulo' }, { t: 'Loja', f: s => s.lojas.map(l => ln({ loja: l })).join(' ') }, { t: 'Unidades', n: 1, f: s => num(s.unidades) }, { t: 'Receita', n: 1, f: s => brl(s.receita) }, { t: 'Preço', n: 1, f: s => brl(s.preco) }, { t: 'Custo unitário', n: 1, f: s => campoCusto(s.sku, s.custo) }], rows.slice(0, 600), 'tk'); sortable('#tk'); };
+    ['#fs', '#fc'].forEach(i => $(i).oninput = draw); draw();
+  },
+  async config() {
+    const c = await getJ('api/config');
+    const linhaManual = ([k, n]) => `<p style="margin-left:24px"><label>${esc(n)}: <input id="al_${k}" value="${c['aliquota_' + k] || ''}" placeholder="ex.: 10" style="width:90px;text-align:right"> %</label></p>`;
+    $('#view').innerHTML = `<div class="box" style="max-width:760px"><h3>Impostos — Simples Nacional</h3>
+      <p style="color:var(--mut)">Informe a <b>alíquota efetiva</b> do Simples de cada conta (% sobre a receita). Ela está no seu DAS do mês (valor do DAS ÷ receita do mês × 100).</p>
+      ${Object.entries(LOJAS).map(linhaManual).join('')}
+      <hr style="border-color:var(--bd)">
+      <p><label><input type="checkbox" id="dpp" ${c.devolucao_perde_produto ? 'checked' : ''}> Considerar o <b>custo do produto</b> como perdido nas devoluções (marque se o produto devolvido não volta ao estoque)</label></p>
+      <button id="sv" style="background:var(--ac);border:0;border-radius:6px;padding:8px 16px;font-weight:600;cursor:pointer">Salvar</button> <span id="ok" class="ok"></span></div>`;
+    $('#sv').onclick = async () => {
+      const b = { aliquota_modo: 'manual', devolucao_perde_produto: $('#dpp').checked ? 1 : 0 };
+      Object.keys(LOJAS).forEach(k => { const v = $('#al_' + k).value.replace(',', '.'); b['aliquota_' + k] = v === '' ? 0 : v; });
+      const r = await fetch('api/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) });
+      $('#ok').className = r.ok ? 'ok' : 'bad'; $('#ok').textContent = r.ok ? 'Salvo ✓' : 'Valor inválido';
+    };
+  },
+  async ads() {
+    const d = await api('ads');
+    const S = (arr, f) => arr.reduce((s, x) => s + (f(x) || 0), 0), m = x => x.metrics || x;
+    const cost = S(d.campanhas, x => m(x).cost), rec = S(d.campanhas, x => m(x).total_amount), un = S(d.campanhas, x => m(x).units_quantity), cl = S(d.campanhas, x => m(x).clicks), pr = S(d.campanhas, x => m(x).prints);
+    const dias = {}; d.diario.forEach(x => x.dias.forEach(y => { const o = dias[y.date] ||= { cost: 0, rec: 0 }; o.cost += y.cost || 0; o.rec += y.total_amount || 0; })); const ks = Object.keys(dias).sort();
+    $('#view').innerHTML = `<p style="color:var(--mut)">Product Ads — últimos 90 dias (filtro de período não se aplica).</p><div class="cards">
+      <div class="card"><div class="l">Investimento</div><div class="v">${brl(cost)}</div></div><div class="card"><div class="l">Vendas por Ads</div><div class="v">${brl(rec)}</div></div>
+      <div class="card"><div class="l">ACOS</div><div class="v">${pct(rec ? cost / rec : 0)}</div></div><div class="card"><div class="l">ROAS</div><div class="v">${cost ? (rec / cost).toFixed(2) : '—'}</div></div>
+      <div class="card"><div class="l">Cliques</div><div class="v">${num(cl)}</div></div><div class="card"><div class="l">Impressões</div><div class="v">${num(pr)}</div></div><div class="card"><div class="l">Unidades</div><div class="v">${num(un)}</div></div></div>
+      <div class="box" style="margin-bottom:14px"><h3>Investimento × vendas por Ads, por dia</h3><div style="height:240px"><canvas id="c1"></canvas></div></div>
+      <div class="grid"><div class="box"><h3>Campanhas</h3>${tbl([{ t: 'Loja', f: ln }, { t: 'Campanha', k: 'name' }, { t: 'Status', f: r => stTag(r.status) }, { t: 'Orçamento/dia', n: 1, f: r => brl(r.daily_budget || r.budget) }, { t: 'Custo', n: 1, f: r => brl(m(r).cost) }, { t: 'Vendas', n: 1, f: r => brl(m(r).total_amount) }, { t: 'ACOS', n: 1, f: r => acosPill(m(r).cost, m(r).total_amount) }], d.campanhas)}</div></div>
+      <div class="box"><h3>Anúncios em Ads (ordenados por custo)</h3>${tbl([{ t: 'Loja', f: ln }, { t: 'Anúncio', f: r => `${esc(r.title)}<br><small style="color:var(--mut)">${lv('item', r.item_id, r.loja)}</small>` }, { t: 'Status', f: r => stTag(r.status) }, { t: 'Cliques', n: 1, f: r => num(m(r).clicks) }, { t: 'Custo', n: 1, f: r => brl(m(r).cost) }, { t: 'Vendas', n: 1, f: r => brl(m(r).total_amount) },
+        { t: 'ACOS', n: 1, f: r => acosPill(m(r).cost, m(r).total_amount) }, { t: 'Un.', n: 1, f: r => num(m(r).units_quantity) }].map(c => c),
+        d.anuncios.sort((a, b) => (m(b).cost || 0) - (m(a).cost || 0)).slice(0, 200), 'ta')}</div>`;
+    sortable('#ta');
+    mk('#c1', { type: 'bar', data: { labels: ks, datasets: [{ label: 'Investimento', backgroundColor: '#ff6b6b', data: ks.map(k => dias[k].cost) }, { label: 'Vendas por Ads', backgroundColor: '#3ecf8e88', data: ks.map(k => dias[k].rec) }] }, options: ch });
+  },
+};
+Object.assign(VIEWS, VIEWS2);
+const MENU = [['lucro', 'Lucro real'], ['custos', 'Custos'], ['ads', 'Ads'], ['config', 'Configurações'], ['visao', 'Visão geral'], ['pedidos', 'Pedidos'], ['itens', 'Anúncios'], ['envios', 'Envios'], ['atendimento', 'Atendimento'], ['reputacao', 'Reputação'], ['promocoes', 'Promoções'], ['cobertura', 'Cobertura'], ['raw', 'Explorador de API']];
+// ── identidade visual (estilo Jodda): ícones, subtítulos, ordem e grupos do menu ──
+const ICO = {
+  lucro: '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  alertas: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  visao: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+  dre: '<path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-6"/>',
+  devolucoes: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+  custos: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1"/>',
+  pedidos: '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+  itens: '<path d="m7.5 4.3 9 5.2"/><path d="M21 8v8a2 2 0 0 1-1 1.7l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.7l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>',
+  envios: '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.7a1 1 0 0 0-.2-.6l-3.3-4.3a1 1 0 0 0-.8-.4H14"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
+  atendimento: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/>',
+  ads: '<path d="m3 11 18-5v12L3 13z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+  promocoes: '<path d="m19 5-14 14"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
+  reputacao: '<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/>',
+  config: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+  cobertura: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
+  raw: '<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
+};
+const svgIco = k => `<svg viewBox="0 0 24 24">${ICO[k] || ICO.visao}</svg>`;
+const SUB = { lucro: 'Lucro pedido a pedido por SKU, dia e pedido', alertas: 'O que precisa da sua atenção agora', visao: 'Resumo das vendas do período', dre: 'Demonstrativo de resultados e faturas do ML', devolucoes: 'Reembolsos, taxa de devolução e perda real', custos: 'Custo unitário por SKU', pedidos: 'Consulta de pedidos', itens: 'Catálogo, estoque e saúde dos anúncios', envios: 'Status e custos de frete', atendimento: 'Perguntas, reclamações e mensagens', ads: 'Product Ads: campanhas, ACOS e ROAS', promocoes: 'Campanhas e quanto sobra ao participar', reputacao: 'Nível e métricas das contas', config: 'Imposto e regras de cálculo', cobertura: 'Dados coletados e execuções do coletor', raw: 'Retorno bruto da API do Mercado Livre' };
+// Cada grupo vira um item do menu; as telas do grupo viram sub-abas (como na Jodda). `ico` = ícone do item.
+const GRUPOS = [
+  { n: 'Dashboard', ico: 'visao', tabs: [['lucro', 'Lucro real'], ['visao', 'Visão geral'], ['alertas', 'Alertas']] },
+  { n: 'Finanças', ico: 'dre', tabs: [['dre', 'DRE'], ['devolucoes', 'Devoluções'], ['custos', 'Custos']] },
+  { n: 'Análise de Pedidos', ico: 'pedidos', tabs: [['pedidos', 'Pedidos'], ['envios', 'Envios'], ['atendimento', 'Atendimento']] },
+  { n: 'Anúncios e Ads', ico: 'ads', tabs: [['itens', 'Anúncios'], ['ads', 'Ads'], ['promocoes', 'Promoções'], ['reputacao', 'Reputação']] },
+  { n: 'Configurações', ico: 'config', tabs: [['config', 'Configurações'], ['cobertura', 'Cobertura'], ['raw', 'Explorador de API']] },
+];
+const grupoDe = v => GRUPOS.find(g => g.tabs.some(t => t[0] === v));
+const badge = k => k === 'alertas' && window.NALERTA ? ` <span class="tag" style="background:var(--bad);color:#fff;padding:0 7px">${window.NALERTA}</span>` : '';
+// status da coleta: a de pedidos roda a cada 5 min pelo servidor; se parar (servidor desligado ou token vencido), o painel avisa
+async function statusColeta() {
+  try {
+    const s = await fetch('api/status').then(r => r.json()), ult = Math.max(0, ...Object.values(s.pedidos || {}));
+    const min = ult ? Math.round((s.agora - ult) / 6e4) : null;
+    const txt = min == null ? 'coleta ainda não executada' : min < 60 ? `há ${min} min` : min < 1440 ? `há ${Math.floor(min / 60)} h` : `há ${Math.floor(min / 1440)} dia(s)`;
+    $('#stxt').textContent = 'Pedidos sincronizados ' + txt; $('#sti').style.background = min != null && min <= 20 ? 'var(--ok)' : min != null && min <= 120 ? 'var(--warn)' : 'var(--bad)';
+    $('#coleta').title = 'A coleta de pedidos roda a cada 5 minutos. Se o horário ficar antigo, confira se o ML Dashboard está ligado e se os tokens estão sendo renovados.';
+    $('#coleta').classList.toggle('velho', !(min != null && min <= 120));
+  } catch { $('#stxt').textContent = 'status da coleta indisponível'; }
+}
+async function vendasRecentes() {
+  try {
+    const r = (await fetch('api/pedidos?loja=all&dias=7&limit=40').then(x => x.json())).filter(x => x.status !== 'cancelled').slice(0, 6);
+    const ago = d => { const m = Math.max(0, Math.round((Date.now() - new Date(d)) / 6e4)); return m < 60 ? m + ' min' : m < 1440 ? Math.floor(m / 60) + ' h' : Math.floor(m / 1440) + ' d'; };
+    $('#vrec').innerHTML = r.length ? r.map(x => `<div class="vr" title="${esc(x.itens)}"><i style="background:${COR[x.loja] || '#94a3b8'}"></i><div><span>${esc((x.itens || '').split(' | ')[0].replace(/ x\d+$/, ''))}</span><small>${esc(LOJAS[x.loja] || x.loja)} · há ${ago(x.data)}</small></div><em>${brl(x.total)}</em></div>`).join('') : '<small>sem vendas nos últimos 7 dias</small>';
+  } catch { $('#vrec').innerHTML = '<small>indisponível</small>'; }
+}
+function montaMenu() {
+  $('#menu').innerHTML = GRUPOS.map(g => `<a data-g="${g.n}" href="#${g.tabs[0][0]}">${svgIco(g.ico)}<span>${esc(g.n)}</span></a>`).join('');
+}
+function montaAbas(v) {
+  const g = grupoDe(v);
+  document.querySelectorAll('#menu a').forEach(a => a.classList.toggle('on', a.dataset.g === g?.n));
+  $('#tabs').innerHTML = g && g.tabs.length > 1 ? g.tabs.map(([k, t]) => `<a href="#${k}" class="${k === v ? 'on' : ''}">${svgIco(k)}${esc(t)}${badge(k)}</a>`).join('') : '';
+}
+// O filtro de período só vale para algumas telas; nas outras aparece só a loja e uma nota com a janela usada
+const PERIODO = { lucro: 1, visao: 1, pedidos: 1, abc: 1, sku: 1, devolucoes: 1, catalogo: 1 }, SEM_FILTRO = { config: 1, calculadora: 1 };
+const NOTA = { dre: 'Período fixo: últimos 12 meses', indicadores: 'Período fixo: últimos 6 meses', ads: 'Período fixo: últimos 90 dias (Product Ads)', campanhas: 'Período fixo: últimos 90 dias (Product Ads)', anunciosads: 'Período fixo: últimos 90 dias (Product Ads)', custos: 'Período escolhido na própria tela', itens: 'Situação atual dos anúncios', estoque: 'Estoque atual · vendas dos últimos 90 dias', alertas: 'Situação atual', reputacao: 'Métricas do ML (últimos 60 dias)', atendimento: 'Perguntas e reclamações mais recentes', envios: 'Todos os envios coletados', promocoes: 'Promoções vigentes', cobertura: 'Todo o histórico coletado', raw: 'Dados crus coletados' };
+async function go() {
+  const id = ++NAV, [v, arg] = (location.hash.slice(1) || 'lucro').split(':'); charts.forEach(c => c.destroy()); charts = [];
+  if (!VIEWS[v]) { location.hash = 'lucro'; return; }
+  $('.flt').style.display = SEM_FILTRO[v] ? 'none' : ''; $('#fper').style.display = PERIODO[v] ? '' : 'none'; $('#fnota').textContent = PERIODO[v] ? '' : (NOTA[v] || '');
+  montaAbas(v);
+  $('#titulo').textContent = grupoDe(v)?.n || ''; $('#sub').textContent = SUB[v] || ''; $('#hico').innerHTML = svgIco(grupoDe(v)?.ico || v);
+  $('#view').innerHTML = '<p style="color:var(--mut)">Carregando…</p>';
+  try { await VIEWS[v](arg && decodeURIComponent(arg)); } catch (e) { if (e === STALE || id !== NAV) return; console.error(e); $('#view').innerHTML = `<div class="box" style="border-color:#fecaca;background:#fff5f5"><b class="bad">Não foi possível carregar esta tela.</b><p style="margin:6px 0 0;color:var(--mut)">${esc(e.message)}</p></div>`; }
+}
+document.addEventListener('DOMContentLoaded', async () => { // espera extra.js e jodda.js (que ajustam menu e telas)
+  LOJAS = await fetch('api/lojas').then(r => r.json());
+  Object.entries(LOJAS).forEach(([k, n]) => $('#loja').insertAdjacentHTML('beforeend', `<option value="${k}">${n}</option>`));
+  vendasRecentes(); setInterval(vendasRecentes, 300000); statusColeta(); setInterval(statusColeta, 60000);
+  $('#usub').textContent = `${Object.keys(LOJAS).length} loja(s) conectada(s)`;
+  montaMenu();
+  $('#loja').onchange = $('#dias').onchange = $('#atualiza').onclick = go; window.onhashchange = go; go();
+});
+</script>
+<script src="extra.js"></script>
+<script src="jodda.js"></script>
+<script src="descontos.js"></script>
+<script src="shopee.js"></script>
+<script src="contas.js"></script>
+</body>
+</html>
