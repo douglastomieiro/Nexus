@@ -1,7 +1,7 @@
 {
   "name": "ml-dashboard",
   "productName": "NEXUS_",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Lucro real por pedido para vendedores do Mercado Livre e da Shopee. Dados só no seu computador.",
   "author": "NEXUS_ contributors",
   "license": "MIT",
