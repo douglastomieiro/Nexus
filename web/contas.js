@@ -8,6 +8,7 @@
   const btn = (id, txt, cor = 'var(--ac)', extra = '') => `<button id="${id}" ${extra} style="background:${cor};border:0;border-radius:6px;padding:8px 16px;font-weight:600;cursor:pointer;color:#fff">${txt}</button>`;
   const dataBr = s => (s ? new Date(s).toLocaleDateString('pt-BR') : '');
   let espera = null; // polling enquanto o usuário autoriza no navegador
+  const WEB = !!window.NEXUS_WEB; // versão do site (GitHub Pages): o login acontece nesta mesma aba e volta para cá
 
   async function carregar() { const r = await fetch('api/contas'); return r.json(); }
 
@@ -28,13 +29,14 @@
         O login automático ainda não está configurado nesta versão (falta o endereço do intermediário — veja o README, "Publicar o intermediário").</div>` : ''}
       ${d.contas.length ? `<div class="tw"><table><thead><tr><th>Nome no painel</th><th>Apelido no ML</th><th>Conectada em</th><th>Situação</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>`
         : '<p style="color:var(--mut)">Nenhuma conta conectada ainda.</p>'}
-      <p style="margin-top:18px">${btn('lnk', '🔗 Copiar link de autorização', 'var(--ac)', d.broker ? '' : 'disabled')}
-        ${btn('con', 'Abrir no navegador padrão', '#64748b', d.broker ? '' : 'disabled')}</p>
+      <p style="margin-top:18px">${btn('lnk', WEB ? '🔗 Conectar conta do Mercado Livre' : '🔗 Copiar link de autorização', 'var(--ac)', d.broker ? '' : 'disabled')}
+        ${WEB ? '' : btn('con', 'Abrir no navegador padrão', '#64748b', d.broker ? '' : 'disabled')}</p>
       <div id="lkbox" style="display:none;margin:4px 0 10px"><input id="lk" readonly style="width:100%;font-size:12px;color:var(--mut)" onclick="this.select()"></div>
       <p id="st" style="color:var(--tx);font-weight:600;min-height:1em"></p>
-      <p style="color:var(--mut);font-size:13px;line-height:1.5"><b>Várias lojas:</b> clique em <b>Copiar link de autorização</b>, cole o link no navegador
+      ${WEB ? `<p style="color:var(--mut);font-size:13px;line-height:1.5"><b>Várias lojas:</b> conecte uma conta de cada vez. Para a segunda loja, saia da primeira no Mercado Livre (ou use outro perfil do navegador) e clique em <b>Conectar</b> de novo — cada navegador/perfil guarda seus próprios dados.<br>
+        O acesso e os dados ficam só neste navegador (os tokens, cifrados). <b>Faça backup dos custos</b> em Configurações: limpar os dados do site apaga tudo.</p>` : `<p style="color:var(--mut);font-size:13px;line-height:1.5"><b>Várias lojas:</b> clique em <b>Copiar link de autorização</b>, cole o link no navegador
         (ou perfil) onde a conta desejada já está logada no Mercado Livre e clique em <b>Autorizar</b>. Repita para cada loja — cada link vale uma vez, por 15 minutos.<br>
-        O acesso fica guardado só neste computador, cifrado. O app precisa estar aberto enquanto você autoriza.</p>
+        O acesso fica guardado só neste computador, cifrado. O app precisa estar aberto enquanto você autoriza.</p>`}
       ${d.arquivo.length ? `<hr style="border-color:var(--bd)"><p style="color:var(--mut);font-size:13px">Também em uso pelo modo avançado (arquivo de token no .env): ${d.arquivo.map(a => esc(a.nome)).join(', ')}.</p>` : ''}
     </div>`;
 
@@ -43,6 +45,7 @@
       e?.preventDefault();
       const r = await fetch('api/contas/ml/conectar', { method: 'POST' }), j = await r.json();
       if (!r.ok) { $('#st').textContent = j.erro || 'Não foi possível iniciar.'; return; }
+      if (WEB) { $('#st').textContent = 'Abrindo o login do Mercado Livre…'; location.assign(j.url); return; }
       if (modo === 'abrir') { window.open(j.url, '_blank'); $('#st').textContent = 'Aguardando você autorizar no navegador…'; }
       else {
         $('#lkbox').style.display = ''; $('#lk').value = j.url;
@@ -62,7 +65,7 @@
       }, 2000);
     };
     $('#lnk').onclick = iniciar('copiar');
-    $('#con').onclick = iniciar('abrir');
+    if ($('#con')) $('#con').onclick = iniciar('abrir');
     document.querySelectorAll('[data-conectar]').forEach(a => (a.onclick = iniciar('copiar')));
     document.querySelectorAll('[data-nome]').forEach(a => (a.onclick = async e => {
       e.preventDefault(); const n = a.dataset.nome;
@@ -75,6 +78,7 @@
       const r = await fetch(`api/contas/${a.dataset.sair}`, { method: 'DELETE' });
       if (r.ok) VIEWS.contas();
     }));
+    try { const m = sessionStorage.getItem('nexus_msg'); if (m) { sessionStorage.removeItem('nexus_msg'); $('#st').textContent = m; } } catch { /* sem aviso */ }
     if ($('#rei')) $('#rei').onclick = async () => { $('#rei').disabled = true; $('#rei').textContent = 'Reiniciando…'; await fetch('api/app/reiniciar', { method: 'POST' }); };
   };
 

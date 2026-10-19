@@ -39,6 +39,14 @@ Para o Mercado Livre liberar o acesso à sua loja, é preciso uma "senha do apli
 - **Alertas** do que precisa de atenção.
 - **Várias contas/lojas** do Mercado Livre no mesmo painel.
 
+## Usar no navegador (sem instalar)
+
+Também dá para usar o Nexus direto no site, sem baixar nada: o painel roda inteiro no seu navegador e guarda os dados nele (veja os limites em [PRIVACIDADE.md](PRIVACIDADE.md#versão-web-site-no-github-pages)).
+
+- **Aviso:** na versão web as chamadas ao Mercado Livre passam pelo intermediário de login (que só repassa e não guarda nada). No app para Windows, só o login passa por ele.
+- A coleta só roda com a aba aberta (a primeira carga de 12 meses pode levar um tempo), só uma aba por vez, e os **custos ficam só no seu navegador**: use *Configurações → Baixar backup* de vez em quando.
+- Para publicar o seu próprio site (GitHub Pages), veja [docs/DESENVOLVIMENTO.md](docs/DESENVOLVIMENTO.md#site-web-github-pages).
+
 ## Como instalar (Windows)
 
 1. Baixe o instalador `Nexus Setup <versão>.exe` na página de [Releases](https://github.com/douglastomieiro/NEXUS_/releases/latest) e rode.

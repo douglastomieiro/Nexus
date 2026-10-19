@@ -19,7 +19,9 @@
     "dist": "electron-builder --win nsis --publish never",
     "versao": "npm version --no-git-tag-version",
     "docs": "node scripts/01-scrape-docs.mjs",
-    "probe": "node scripts/02-probe.mjs"
+    "probe": "node scripts/02-probe.mjs",
+    "site": "node site/build.mjs",
+    "site:servir": "node site/servir.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
@@ -29,9 +31,11 @@
     "node-cron": "^4.6.0"
   },
   "devDependencies": {
+    "@sqlite.org/sqlite-wasm": "^3.54.1-build1",
     "cheerio": "^1.2.0",
     "electron": "44.7.2",
-    "electron-builder": "26.15.3"
+    "electron-builder": "26.15.3",
+    "esbuild": "^0.28.2"
   },
   "build": {
     "appId": "io.github.mldashboard",

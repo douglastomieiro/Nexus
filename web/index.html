@@ -403,6 +403,26 @@ function detCard(k) {
   $('#dt').textContent = x.t; $('#db').innerHTML = h; $('#dw').classList.add('on');
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') fecha(); });
+// Site web: os dados ficam no navegador (limpar os dados do site apaga tudo). O backup em arquivo guarda os custos e a configuração (o resto é recoletado do ML).
+function backupWeb() {
+  const box = document.createElement('div'); box.className = 'box'; box.style.cssText = 'max-width:760px;margin-top:14px';
+  box.innerHTML = `<h3>Backup dos custos</h3><p style="color:var(--mut)">Seus custos e alíquotas existem <b>só neste navegador</b>. Se você limpar os dados do site ou trocar de computador, eles somem — o resto (pedidos etc.) volta sozinho do Mercado Livre. Baixe uma cópia de vez em quando.</p>
+    <button id="bkx" style="background:var(--ac);border:0;border-radius:6px;padding:8px 16px;font-weight:600;cursor:pointer">Baixar backup</button>
+    <label style="margin-left:10px;cursor:pointer;text-decoration:underline">Restaurar de um arquivo… <input id="bki" type="file" accept=".json,application/json" style="display:none"></label> <span id="bkm"></span>`;
+  $('#view').appendChild(box);
+  $('#bkx').onclick = async () => {
+    const d = await fetch('api/backup').then(r => r.json());
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 1)], { type: 'application/json' }));
+    a.download = 'nexus-custos-' + new Date().toISOString().slice(0, 10) + '.json'; a.click(); URL.revokeObjectURL(a.href);
+  };
+  $('#bki').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    let arquivo; try { arquivo = JSON.parse(await f.text()); } catch { $('#bkm').textContent = 'Arquivo inválido.'; return; }
+    if (!confirm('Restaurar este backup? Os custos e alíquotas atuais serão substituídos pelos do arquivo.')) return;
+    const r = await fetch('api/backup/restaurar', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ arquivo }) }), j = await r.json();
+    $('#bkm').textContent = r.ok ? `✓ ${j.restaurado} custos restaurados.` : (j.erro || 'Não foi possível restaurar.');
+  };
+}
 const VIEWS2 = {
   async lucro() {
     const d = await api('lucro'), t = d.total, cb = d.cobertura;
@@ -494,6 +514,7 @@ const VIEWS2 = {
       const r = await fetch('api/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) });
       $('#ok').className = r.ok ? 'ok' : 'bad'; $('#ok').textContent = r.ok ? 'Salvo ✓' : 'Valor inválido';
     };
+    if (window.NEXUS_WEB) backupWeb();
   },
   async ads() {
     const d = await api('ads');

@@ -1,0 +1,55 @@
+# Publica o site (versão web do Nexus) no GitHub Pages a cada envio para a main. O site roda inteiro no navegador: aqui só se gera os arquivos estáticos.
+#
+# Configuração única:
+#   1. Settings → Pages → Build and deployment → Source: "GitHub Actions".
+#   2. Settings → Secrets and variables → Actions → Variables: BROKER_URL = endereço do intermediário de login (a mesma variável da publicação do app).
+#   3. No intermediário (broker/wrangler.toml), WEB_URL = endereço do site (https://<usuario>.github.io/<repositorio>/) e `npx wrangler deploy`.
+name: Publicar site
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', 'server/**', 'site/**', 'package.json', 'package-lock.json', '.github/workflows/site.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      # --ignore-scripts: o site não usa o Electron nem o SQLite nativo do app (só o esbuild e o SQLite em WebAssembly)
+      - run: npm ci --ignore-scripts
+
+      - name: Gerar o site
+        env:
+          NEXUS_BROKER: ${{ vars.BROKER_URL }}
+        run: |
+          [ -n "$NEXUS_BROKER" ] || { echo "Defina a variável BROKER_URL (Settings > Secrets and variables > Actions > Variables)."; exit 1; }
+          node site/build.mjs
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -1,6 +1,6 @@
 # Privacidade e segurança do Nexus
 
-Resumo: **seus pedidos, custos e margens ficam só no seu computador.** Não temos servidor com os seus dados, não pedimos cadastro e não vendemos, compartilhamos ou analisamos informação nenhuma sobre você ou sua loja.
+Resumo: **seus pedidos, custos e margens ficam só no seu computador (ou no seu navegador, na versão web).** Não temos servidor com os seus dados, não pedimos cadastro e não vendemos, compartilhamos ou analisamos informação nenhuma sobre você ou sua loja.
 
 Este documento diz exatamente o que o app faz. O código é aberto: você ou alguém de confiança pode conferir cada afirmação aqui.
 
@@ -35,6 +35,18 @@ O Mercado Livre exige uma "senha do aplicativo" (`client_secret`) para liberar e
 
 Limite honesto: quem controla o intermediário poderia, em tese, alterar o código para registrar tokens. É por isso que ele é pequeno, aberto e não tem armazenamento, e é por isso que o acesso concedido só permite o que você autorizou no Mercado Livre e pode ser revogado por você a qualquer momento.
 
+## Versão web (site no GitHub Pages)
+Além do app para Windows existe uma versão que roda direto no navegador, sem instalar nada. Ela é **o mesmo código**, e o que muda é onde as coisas ficam e por onde passam:
+
+- **Onde ficam os dados:** no armazenamento do **seu navegador** (banco SQLite no OPFS, mais IndexedDB). O GitHub Pages só entrega os arquivos do site: ele não recebe nem guarda dados seus. Nada é enviado a nós.
+- **Tokens:** ficam no IndexedDB do navegador, cifrados com uma chave que o próprio navegador não deixa exportar. Isso protege contra cópia do arquivo, mas **não** contra um script malicioso rodando na página (por isso o site tem política de conteúdo restrita, não carrega nada de terceiros e é código aberto).
+- **O que muda no trânsito:** os navegadores não conseguem chamar a API do Mercado Livre diretamente (o ML bloqueia por CORS). Por isso, no site, **as chamadas à API do Mercado Livre e do Mercado Pago passam pelo mesmo intermediário de login**, que apenas as repassa. Ou seja, diferente do app para Windows, aqui os pedidos, custos de frete e dados de compradores **passam pelo intermediário em trânsito** (incluindo o token no momento da chamada). Ele continua **sem banco de dados e sem gravar registros** (veja `broker/worker.js`, rota `POST /p`), só aceita pedidos vindos do endereço do site e só fala com `api.mercadolibre.com` e `api.mercadopago.com`. A Cloudflare pode registrar dados técnicos de conexão, como em qualquer site.
+- **Custos e configurações** só existem no seu navegador. Se você limpar os dados do site ou trocar de computador, perde tudo (o resto volta do Mercado Livre). Use **Configurações → Baixar backup**.
+- **Só uma aba por vez** pode usar os dados, e a coleta só roda enquanto a aba está aberta.
+- A versão web não tem atualização automática: você sempre abre a versão mais recente do site.
+
+Se você não quer que seus dados passem pelo intermediário, use o app para Windows: nele só o login passa por lá.
+
 ## Como o app se protege no seu computador
 - O servidor interno do painel só escuta em `127.0.0.1` (o próprio computador), numa porta sorteada a cada abertura.
 - Ele exige uma chave criada a cada abertura, que só a janela do app conhece. Outros programas e sites recebem erro 403.
@@ -56,4 +68,4 @@ Abra uma [issue](https://github.com/douglastomieiro/NEXUS_/issues). **Nunca** co
 
 Se encontrar uma falha de segurança, avise em particular pelo recurso de aviso de vulnerabilidade do GitHub (aba *Security* do repositório) antes de divulgar.
 
-_Última atualização: 15/10/2026._
+_Última atualização: 19/10/2026._

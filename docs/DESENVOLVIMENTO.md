@@ -29,6 +29,22 @@ O GitHub Actions (`.github/workflows/publicar.yml`) gera o instalador e cria a r
 
 Para gerar só o instalador no seu PC, sem publicar: `npm run dist` (sai em `dist/<versão>/`).
 
+## Site web (GitHub Pages)
+O mesmo código de `server/` e `web/` roda no navegador: `site/build.mjs` (esbuild) empacota `server/index.js` num **Web Worker**, trocando só o que é do Node (`site/src/shims/`: Express → roteador mínimo, `better-sqlite3` → SQLite em WebAssembly com OPFS, `node-cron` → agendador por minuto) e os módulos de plataforma (`site/src/overrides/`: `ml.js`, `contas.js`, `contas-rotas.js`, `backup.js`, `descontos/ml.js`, Shopee vazia). A interface (`web/`) é a mesma: `site/src/client/boot.js` faz os `fetch('api/...')` irem para o Worker por `postMessage`.
+
+- **Por que o intermediário repassa as chamadas:** a API do Mercado Livre responde 403 à pré-verificação de CORS (testado: `orders/search`, `users/me` etc. falham no navegador; o Mercado Pago passa). Então o navegador manda cada chamada ao intermediário (`POST /p`, pedido "simples" em `text/plain`, sem pré-verificação), que a repassa ao ML/MP. Só vale para a origem em `WEB_URL`.
+- **Login:** o `state` do site é `w.<nonce>`; o intermediário devolve o código ao endereço fixo `WEB_URL` (nunca a um endereço vindo do pedido). A troca do código e as renovações usam PKCE, como no app.
+- **Contas novas** valem depois que a página recarrega (isso é automático ao voltar do login).
+
+**Publicar (uma vez):**
+1. Em `broker/wrangler.toml`, preencha `WEB_URL` com o endereço do site (`https://<usuario>.github.io/<repositorio>/`, com a barra final) e rode `npx wrangler deploy` dentro de `broker/`.
+2. No GitHub: *Settings → Pages → Source: GitHub Actions*. A variável `BROKER_URL` (a mesma da publicação do app) também é usada pelo site.
+3. A cada envio para a `main` que mexa em `web/`, `server/` ou `site/`, o workflow `.github/workflows/site.yml` gera e publica o site. Manual: aba *Actions → Publicar site → Run workflow*.
+
+**Testar no PC:** `npm run site` (gera `site/dist`) e `npm run site:servir` (http://127.0.0.1:4173/). O login real só funciona no endereço publicado (o intermediário só devolve o ML para o `WEB_URL`); para testar sem o ML real, rode o intermediário e um ML simulado como em `test/login.test.mjs` e gere o site com `NEXUS_BROKER=<endereço>`.
+
+**Limites conhecidos:** a coleta só roda com a aba aberta; só uma aba por vez (o banco no OPFS é exclusivo); dados e tokens presos ao navegador/perfil (backup dos custos em arquivo); Shopee e o modo avançado (`.env`) não existem no site. O plano gratuito da Cloudflare permite 100 mil requisições por dia no intermediário: a carga inicial de 12 meses de uma loja grande consome milhares.
+
 ## Modo avançado (.env)
 Opcional, na pasta de dados (ou na pasta do projeto rodando com `node start.js`, que exige Node 22+):
 - `TOKENS_LOJA<n>` / `NOME_LOJA<n>`: conta do ML lida de um arquivo de token mantido por **outro** programa (JSON com `access_token`, `expires_in` em segundos e `updated_at` em ms). O painel só lê e espera a renovação feita por fora.

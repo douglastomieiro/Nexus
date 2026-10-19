@@ -6,5 +6,9 @@ compatibility_date = "2026-10-01"
 # ID do app criado no DevCenter do Mercado Livre (público).
 ML_CLIENT_ID = "2746964471058760"
 
+# Endereço do site web (GitHub Pages), com a barra final. Só ele pode usar o login e o repasse das chamadas pelo navegador.
+# Deixe vazio (ou apague a linha) para desligar o site e manter só o app instalado.
+WEB_URL = "https://SEU-USUARIO.github.io/NOME-DO-REPOSITORIO/"
+
 # A senha do app NÃO fica aqui. Grave-a como secret:
 #   npx wrangler secret put ML_CLIENT_SECRET

@@ -36,13 +36,14 @@ const ml = http.createServer(async (req, res) => {
     }
     if (p.get('grant_type') === 'refresh_token') { nRefresh++; if (!refresh.delete(p.get('refresh_token'))) return out({ error: 'invalid_grant' }); return out(novo()); }
   }
+  if (u.pathname === '/users/me') { res.writeHead(200, { 'content-type': 'application/json', 'retry-after': '7' }); return res.end(JSON.stringify({ id: usuario, auth: req.headers.authorization || null, ua: req.headers['api-version'] || null })); }
   res.writeHead(404); res.end();
 });
 const pML = await escuta(ml);
 
 // ── intermediário (o mesmo worker.js da Cloudflare) ──
 const worker = (await import(pathToFileURL(path.join(PROJ, 'broker/worker.js')))).default;
-const wenv = { ML_CLIENT_ID: '123', ML_CLIENT_SECRET: 'segredo-teste', ML_API: `http://127.0.0.1:${pML}`, ML_AUTH: `http://127.0.0.1:${pML}/authorization` };
+const wenv = { ML_CLIENT_ID: '123', ML_CLIENT_SECRET: 'segredo-teste', ML_API: `http://127.0.0.1:${pML}`, ML_AUTH: `http://127.0.0.1:${pML}/authorization`, MP_API: `http://127.0.0.1:${pML}`, WEB_URL: 'https://exemplo.github.io/NEXUS_/' };
 const broker = http.createServer(async (req, res) => {
   let b = ''; for await (const ch of req) b += ch;
   const r = await worker.fetch(new Request(`http://127.0.0.1:${req.socket.localPort}${req.url}`, { method: req.method, headers: req.headers, body: req.method === 'POST' ? b : undefined }), wenv);
@@ -107,5 +108,24 @@ const t2 = JSON.parse(fs.readFileSync(arq, 'utf8')); ok(t2.refresh_token !== t.r
 // intermediário: entradas inválidas
 const inval = await fetch(`http://127.0.0.1:${pBR}/ml/callback?code=x&state=../evil`, { redirect: 'manual' });
 ok(inval.status === 400, 'intermediário recusa state inválido (não redireciona para fora)');
+
+// ── site web (GitHub Pages): retorno do login, CORS e repasse das chamadas ──
+const B = `http://127.0.0.1:${pBR}`, WEB = 'https://exemplo.github.io', NONCE = 'AAAAAAAAAAAAAAAAAAAAAAAA';
+const web = await fetch(`${B}/ml/callback?code=TG-1&state=w.${NONCE}`, { redirect: 'manual' });
+ok(web.status === 302 && web.headers.get('location') === `https://exemplo.github.io/NEXUS_/?code=TG-1&state=w.${NONCE}`, 'login do site: o ML volta ao endereço FIXO do site (WEB_URL)');
+const forjadoW = await fetch(`${B}/ml/callback?code=x&state=w.curto`, { redirect: 'manual' }); ok(forjadoW.status === 400, 'state web inválido → recusado (sem redirecionar)');
+const pedido = (corpo, origem = WEB) => fetch(B + '/p', { method: 'POST', headers: { 'content-type': 'text/plain;charset=UTF-8', ...(origem ? { origin: origem } : {}) }, body: JSON.stringify(corpo) });
+const bom = await pedido({ api: 'ml', metodo: 'GET', caminho: '/users/me?x=1', cabecalhos: { authorization: 'Bearer APP_USR-teste', 'api-version': '2', cookie: 'segredo' } });
+const dado = await bom.json();
+ok(bom.status === 200 && dado.auth === 'Bearer APP_USR-teste' && dado.ua === '2', 'repasse: chamada chega ao ML com token e Api-Version');
+ok(bom.headers.get('access-control-allow-origin') === WEB && bom.headers.get('retry-after') === '7', 'repasse: CORS só para o site e retry-after preservado');
+ok((await pedido({ api: 'ml', metodo: 'GET', caminho: '/users/me', cabecalhos: { authorization: 'Bearer x' } }, 'https://outro-site.com')).status === 403, 'repasse: outra origem → 403');
+ok((await pedido({ api: 'ml', metodo: 'GET', caminho: '/users/me', cabecalhos: { authorization: 'Bearer x' } }, null)).status === 403, 'repasse: sem Origin (fora do navegador) → 403');
+ok((await pedido({ api: 'evil', metodo: 'GET', caminho: '/users/me', cabecalhos: { authorization: 'Bearer x' } })).status === 400, 'repasse: destino fora de ml/mp → 400');
+ok((await pedido({ api: 'ml', metodo: 'GET', caminho: '//evil.com/x', cabecalhos: { authorization: 'Bearer x' } })).status === 400, 'repasse: caminho começando com // → 400');
+ok((await pedido({ api: 'ml', metodo: 'GET', caminho: '/a/../b', cabecalhos: { authorization: 'Bearer x' } })).status === 400, 'repasse: caminho com .. → 400');
+ok((await pedido({ api: 'ml', metodo: 'GET', caminho: '/users/me', cabecalhos: {} })).status === 401, 'repasse: sem token → 401 (não repassa)');
+const pre = await fetch(B + '/p', { method: 'OPTIONS', headers: { origin: WEB, 'access-control-request-method': 'POST' } }); ok(pre.status === 204 && pre.headers.get('access-control-allow-origin') === WEB, 'pré-verificação CORS do site aceita');
+ok((await fetch(B + '/p', { method: 'OPTIONS', headers: { origin: 'https://outro-site.com' } })).status === 403, 'pré-verificação de outra origem recusada');
 
 ml.close(); broker.close(); fs.rmSync(DADOS, { recursive: true, force: true });

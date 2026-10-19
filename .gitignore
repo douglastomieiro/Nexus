@@ -26,6 +26,9 @@ video-frames/
 node_modules/
 *.log
 
+# Site web gerado (GitHub Pages)
+site/dist/
+
 # App empacotado (electron-builder)
 dist/
 dist-*/
