@@ -6,7 +6,8 @@
   ICO.nmdia = ICO.cal; ICO.nmprojecao = ICO.rocket; ICO.nmcategorias = ICO.catalogo; ICO.nmanuncios = ICO.abc; ICO.nmclientes = ICO.reputacao || ICO.pedidos;
   ICO.nmotimiza = ICO.bulb; ICO.nmcrescimento = ICO.indicadores;
   ICO.nmbuscas = ICO.search; ICO.nmmaisvendidos = ICO.trophy;
-  const tabs = [['nmbuscas', 'Top buscas'], ['nmmaisvendidos', 'Mais vendidos'], ['nmdia', 'Visão do dia'], ['nmprojecao', 'Projete suas vendas'], ['nmcategorias', 'Suas categorias'], ['nmanuncios', 'Performance de vendas'], ['nmclientes', 'Seus clientes'], ['nmotimiza', 'Otimize seus anúncios'], ['nmcrescimento', 'Crescimento']];
+  ICO.nmconcorrencia = '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>';
+  const tabs = [['nmbuscas', 'Top buscas'], ['nmmaisvendidos', 'Mais vendidos'], ['nmconcorrencia', 'Concorrência'], ['nmdia', 'Visão do dia'], ['nmprojecao', 'Projete suas vendas'], ['nmcategorias', 'Suas categorias'], ['nmanuncios', 'Performance de vendas'], ['nmclientes', 'Seus clientes'], ['nmotimiza', 'Otimize seus anúncios'], ['nmcrescimento', 'Crescimento']];
   if (!GRUPOS.some(g => g.n === 'Nexus Metrics')) {
     const i = GRUPOS.findIndex(g => g.n === 'Configurações');
     GRUPOS.splice(i < 0 ? GRUPOS.length : i, 0, { n: 'Nexus Metrics', ico: 'metrics', tabs });
@@ -17,9 +18,10 @@
     nmcategorias: 'Seu desempenho e peso em cada categoria em que você vende', nmanuncios: 'Os anúncios que movem o seu faturamento (e os que não vendem)',
     nmclientes: 'Quem compra de você, quanto e com que frequência', nmotimiza: 'Qualidade dos anúncios segundo o ML, priorizada pelo peso de cada um nas vendas',
     nmcrescimento: 'Evolução do seu negócio mês a mês',
+    nmconcorrencia: 'Quem está ganhando de você no catálogo e nos anúncios patrocinados, segundo o próprio Mercado Livre',
   });
   Object.assign(PERIODO, { nmcategorias: 1, nmanuncios: 1, nmclientes: 1 });
-  Object.assign(NOTA, { nmbuscas: 'Ranking do ML de hoje · categoria escolhida na própria tela', nmmaisvendidos: 'Top 20 do ML de hoje · categoria escolhida na própria tela', nmdia: 'Hoje vs. média dos últimos 30 dias', nmprojecao: 'Mês escolhido na própria tela', nmotimiza: 'Anúncios ativos · vendas e visitas dos últimos 30 dias', nmcrescimento: 'Últimos 13 meses' });
+  Object.assign(NOTA, { nmbuscas: 'Ranking do ML de hoje · categoria escolhida na própria tela', nmmaisvendidos: 'Top 20 do ML de hoje · categoria escolhida na própria tela', nmdia: 'Hoje vs. média dos últimos 30 dias', nmprojecao: 'Mês escolhido na própria tela', nmotimiza: 'Anúncios ativos · vendas e visitas dos últimos 30 dias', nmcrescimento: 'Últimos 13 meses', nmconcorrencia: 'Catálogo: situação de agora · Ads e vendas: últimos 30 dias' });
 
   // ───────── helpers ─────────
   const tags = x => [x.catalogo ? '<span class="sg b">catálogo</span>' : '', x.tipo ? `<span class="sg n">${esc(x.tipo)}</span>` : '', x.lg ? `<span class="sg ${x.lg === 'Full' ? 'g' : x.lg === 'Flex' ? 'a' : 'n'}">${esc(x.lg)}</span>` : ''].join(' ');
@@ -81,6 +83,85 @@
           <td class="c">${x.meu ? `<span class="sg g">seu</span>${x.ganhaBuyBox ? ' <span class="sg g">ganha o buy box</span>' : ''}` : ''}</td></tr>`).join('')}</tbody></table></div></div>
       <p style="color:var(--mut);font-size:12px">O Mercado Livre informa a posição de cada produto, não quantas unidades ele vendeu.</p>`;
     $('#ncat').onchange = () => { location.hash = 'nmmaisvendidos:' + encodeURIComponent($('#ncat').value); };
+  };
+
+  // ═════════ CONCORRÊNCIA ═════════
+  // Catálogo: price_to_win (situação na disputa, preço para ganhar e o vencedor). Ads: detalhe da campanha (impressões que você leva e as que perde).
+  const SIT = { winning: ['Ganhando', 'g'], sharing_first_place: ['Dividindo o 1º lugar', 'a'], competing: ['Perdendo', 'r'], listed: ['Só aparece na lista', 'r'], not_listed: ['Fora da disputa', 'n'] };
+  const MOTIVO = {
+    item_not_opted_in: 'O anúncio não entrou na disputa do catálogo', item_paused: 'Anúncio pausado', no_improvement_price: 'O ML indica que só baixar o preço não basta',
+    shipping_mode: 'Forma de envio inferior à do vencedor', reputation_below_threshold: 'Reputação abaixo da exigida para ganhar', winner_has_better_reputation: 'O vencedor tem reputação melhor',
+    manufacturing_time: 'Tem prazo de fabricação e o vencedor tem estoque imediato', non_trusted_seller: 'Conta marcada como não confiável', newbie_program_seller: 'Atingiu o limite de vendas do programa de iniciantes',
+    temporarily_winning_manufacturing_time: 'Ganhando por enquanto (tem prazo de fabricação)', temporarily_competing_manufacturing_time: 'Competindo por enquanto (tem prazo de fabricação)',
+    temporarily_winning_best_reputation_available: 'Ganhando por enquanto (melhor reputação disponível)', temporarily_competing_best_reputation_available: 'Competindo por enquanto (melhor reputação disponível)',
+  };
+  const sit = s => { const [t, c] = SIT[s] || [s || '—', 'n']; return `<span class="sg ${c}">${esc(t)}</span>`; };
+  const pct100 = v => v == null ? '—' : pc(v / 100, 1); // sov e ACOS chegam em %
+  VIEWS.nmconcorrencia = async function () {
+    const R = await api('nm/concorrencia'), S = R.resumo, all = R.catalogo, st = { k: 'prioridade', d: -1 }, f = { q: '', sit: '', minha: false, page: 1 }, PG = 40;
+    // ordem padrão: primeiro quem está perdendo (e vende mais), depois dividindo, por último quem ganha
+    for (const x of all) x.prioridade = ({ competing: 3, listed: 3, sharing_first_place: 2, not_listed: 1 }[x.status] || 0) * 1e9 + x.receita;
+    const A = R.ads.filter(x => x.impressoes > 0), imp = A.reduce((t, x) => t + x.impressoes, 0);
+    // parcela total = impressões recebidas ÷ impressões possíveis (cada campanha: recebidas ÷ parcela)
+    const possiveis = A.reduce((t, x) => t + (x.parcela ? x.impressoes / x.parcela : 0), 0), pesada = k => imp ? A.reduce((t, x) => t + (x[k] || 0) * x.impressoes, 0) / imp : null;
+    $('#view').innerHTML = `${all.length ? '' : '<div class="note">Ainda não há disputa de catálogo coletada. A coleta de anúncios busca a situação de cada anúncio de catálogo ativo a cada 3 horas.</div>'}
+      <div class="kgrid">${kpi('Ganhando no catálogo', `${num(S.ganhando)} <small style="font-size:14px;color:var(--mut)">de ${num(S.anuncios)}</small>`, S.dividindo ? `${num(S.dividindo)} dividindo o 1º lugar` : 'anúncios de catálogo ativos', 'trophy', 'green')}
+        ${kpi('Perdendo no catálogo', num(S.perdendo), `${brl(S.receitaPerdendo)} vendidos por eles em 30 dias`, 'cancel', S.perdendo ? 'red' : 'slate')}
+        ${kpi('Perdendo para você mesmo', num(S.paraVoce), 'o vencedor é um anúncio seu (de outra conta ou outro anúncio)', 'copy', S.paraVoce ? 'purple' : 'slate')}
+        ${kpi('Fora da disputa', num(S.semCompetir), 'anúncios de catálogo que não estão competindo', 'info', 'amber')}</div>
+      <div class="box"><div class="boxh"><h3>Disputa no catálogo <small id="ncn"></small></h3>${filtros('ncof', `<label style="min-width:200px">Buscar<input id="ncq" placeholder="Título, SKU ou MLB…"></label>
+          <label>Situação<select id="ncs"><option value="">Todas</option><option value="perdendo">Perdendo</option><option value="winning">Ganhando</option><option value="sharing_first_place">Dividindo o 1º lugar</option><option value="fora">Fora da disputa</option></select></label>
+          <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="ncm"> só perdendo para você mesmo</label><button class="btn2" id="nccsv">${ic('down', 13)}Exportar</button>`)}</div>
+        <p style="color:var(--mut);margin:0 0 8px;font-size:12px">"Preço para ganhar" é o preço que o ML calcula para o seu anúncio passar a ganhar, considerando as condições de cada um (frete grátis, Full, envio no dia). Quando ele fica muito abaixo do seu preço, o que pesa são as condições, não o preço.</p>
+        <div class="tw" style="max-height:none"><table class="rt" id="nctb2"><thead></thead><tbody></tbody></table></div><div class="pg" id="ncpg"></div></div>
+      <div class="box"><h3>Anúncios patrocinados: disputa por impressões <small>últimos 30 dias · por campanha</small></h3>
+        ${A.length ? `<div class="kgrid" style="margin-bottom:10px">${kpi('Impressões que você leva', possiveis ? pc(imp / possiveis, 1) : '—', `${num(imp)} de ~${num(Math.round(possiveis))} possíveis`, 'campanhas', 'blue')}
+          ${kpi('Perdidas para concorrentes', pc(pesada('perdaClassificacao'), 1), 'por classificação: lance, qualidade e relevância do anúncio', 'cancel', 'red')}
+          ${kpi('Perdidas por orçamento', pc(pesada('perdaOrcamento'), 1), 'o orçamento da campanha acabou antes', 'custos', 'amber')}</div>` : ''}
+        <div class="tw" style="max-height:none"><table class="rt"><thead><tr><th>Campanha</th><th class="n">Investimento</th><th class="n">Vendas</th><th class="c">ACOS · referência</th><th class="n">Parcela de impressões</th><th class="n">No topo</th><th class="n">Perdidas p/ classificação</th><th class="n">Perdidas p/ orçamento</th><th class="n">Share of voice</th></tr></thead><tbody>
+        ${R.ads.map(x => `<tr${x.status !== 'active' ? ' style="opacity:.6"' : ''}><td><b>${esc(x.nome)}</b><small style="display:block;color:var(--mut)">${esc(lojaTxt(x.loja))} · ${({ active: 'ativa', paused: 'pausada' })[x.status] || esc(x.status || '—')}${x.acosAlvo ? ` · ACOS alvo ${pct100(x.acosAlvo)}` : ''}</small></td>
+          <td class="n">${brl(x.custo)}</td><td class="n">${brl(x.receita)}<small style="display:block;color:var(--mut)">${num(x.unidades)} un.</small></td>
+          <td class="c">${x.acos == null || !x.custo ? '—' : `<span class="sg ${x.acosRef && x.acos <= x.acosRef ? 'g' : x.acosRef ? 'r' : 'n'}">${pct100(x.acos)}</span>`}${x.acosRef ? `<small style="display:block;color:var(--mut)">mercado ${pct100(x.acosRef)}</small>` : ''}</td>
+          <td class="n">${x.parcela == null ? '—' : pc(x.parcela, 1)}</td><td class="n">${x.topo == null ? '—' : pc(x.topo, 1)}</td>
+          <td class="n">${x.perdaClassificacao == null ? '—' : `<span class="${x.perdaClassificacao >= 0.5 ? 'bad' : ''}">${pc(x.perdaClassificacao, 1)}</span>`}</td><td class="n">${x.perdaOrcamento == null ? '—' : pc(x.perdaOrcamento, 1)}</td><td class="n">${pct100(x.sov)}</td></tr>`).join('')
+          || '<tr><td colspan="9" class="empty">Nenhuma campanha de Product Ads coletada. A coleta de Ads roda a cada 3 horas.</td></tr>'}</tbody></table></div>
+        <p style="color:var(--mut);font-size:12px;margin:8px 0 0">Parcela de impressões = das vezes em que seus anúncios podiam aparecer, em quantas apareceram. "Perdidas por classificação" são as que foram para concorrentes com lance, qualidade ou relevância melhores. ACOS de referência é o que o ML informa como média do mercado para a campanha.</p></div>`;
+    const quando = d => d ? ddmm(d) : '';
+    let cur = [];
+    const draw = () => {
+      cur = ordena(all.filter(x => (!f.q || (x.titulo + ' ' + x.sku + ' ' + x.item).toLowerCase().includes(f.q))
+        && (!f.sit || (f.sit === 'perdendo' ? ['competing', 'listed'].includes(x.status) : f.sit === 'fora' ? x.status === 'not_listed' : x.status === f.sit))
+        && (!f.minha || x.vencedor?.minhaLoja)), st);
+      $('#ncn').textContent = `(${num(cur.length)})`;
+      $('#nctb2 thead').innerHTML = `<tr><th>Anúncio</th><th>Situação</th>${thS('Seu preço', 'preco', st, 'n')}${thS('Preço p/ ganhar', 'dif', st, 'n')}<th>Quem ganha</th><th>O que o vencedor tem a mais</th>${thS('Vendas 30d', 'receita', st, 'n')}${thS('Lucro/un.', 'lucroUn', st, 'n')}</tr>`;
+      ligaSort('#nctb2', st, () => { f.page = 1; draw(); });
+      const pgs = Math.max(Math.ceil(cur.length / PG), 1); f.page = Math.min(f.page, pgs);
+      $('#nctb2 tbody').innerHTML = cur.slice((f.page - 1) * PG, f.page * PG).map(x => {
+        const caiu = x.ontem && x.ontem !== x.status, longe = x.dif != null && x.preco && x.dif / x.preco > 0.3;
+        return `<tr><td>${prod(x)}</td>
+        <td>${sit(x.status)}${x.dividindo ? `<small style="display:block;color:var(--mut)">com ${num(x.dividindo)} vendedor(es)</small>` : ''}
+          ${caiu ? `<small style="display:block">ontem: ${esc((SIT[x.ontem] || [x.ontem])[0])}</small>` : x.desde && x.diaAnterior ? `<small style="display:block;color:var(--mut)">desde ${quando(x.desde)}</small>` : ''}
+          ${x.motivos.length ? `<small style="display:block;color:var(--mut);max-width:220px">${x.motivos.map(m => esc(MOTIVO[m] || m)).join('<br>')}</small>` : ''}</td>
+        <td class="n">${x.preco == null ? '—' : brl(x.preco)}</td>
+        <td class="n">${x.precoGanhar == null ? '—' : x.status === 'winning' ? `<span style="color:var(--mut)">${brl(x.precoGanhar)}</span>` : `<b>${brl(x.precoGanhar)}</b>`}
+          ${x.dif > 0 && x.status !== 'winning' ? `<small style="display:block" class="${longe ? 'bad' : ''}">${brl(x.dif)} abaixo (${pc(x.dif / x.preco, 0)})${longe ? (x.falta.length ? '<br>só preço não resolve' : '<br>diferença grande: confira se é o mesmo produto e quantidade') : ''}</small>` : ''}</td>
+        <td>${x.vencedor ? `<a class="lk" target="_blank" rel="noopener" href="${mlUrl('item', x.vencedor.item)}">${esc(x.vencedor.item)}</a>${x.vencedor.preco != null ? `<small style="display:block">${brl(x.vencedor.preco)}</small>` : ''}
+          ${x.vencedor.minhaLoja ? `<span class="sg b">seu · ${esc(lojaTxt(x.vencedor.minhaLoja))}</span>` : ''}` : x.status === 'winning' ? '<span class="sg g">você</span>' : '—'}
+          ${x.prod ? `<small style="display:block"><a class="lk" target="_blank" rel="noopener" href="https://www.mercadolivre.com.br/p/${esc(x.prod)}">página do produto</a></small>` : ''}</td>
+        <td style="max-width:240px"><small>${x.falta.length ? x.falta.map(t => `• ${esc(t)}`).join('<br>') : x.status === 'winning' ? '' : '<span style="color:var(--mut)">mesmas condições: a diferença é o preço</span>'}
+          ${x.status === 'winning' && x.oportunidades.length ? `<span style="color:var(--mut)">ainda pode ativar: ${x.oportunidades.map(esc).join(', ')}</span>` : ''}</small></td>
+        <td class="n">${brl(x.receita)}<small style="display:block;color:var(--mut)">${num(x.unidades)} un.</small></td>
+        <td class="n">${x.lucroUn == null ? '—' : `<span class="${x.lucroUn < 0 ? 'bad' : ''}">${brl(x.lucroUn)}</span>`}</td></tr>`;
+      }).join('') || '<tr><td colspan="8" class="empty">Nenhum anúncio com esses filtros.</td></tr>';
+      pager($('#ncpg'), cur.length, f.page, PG, p => { f.page = p; draw(); });
+    };
+    const ler = () => { f.q = $('#ncq').value.toLowerCase().trim(); f.sit = $('#ncs').value; f.minha = $('#ncm').checked; f.page = 1; draw(); };
+    $('#ncs').onchange = ler; $('#ncm').onchange = ler; $('#ncq').oninput = debounce(ler);
+    $('#nccsv').onclick = () => csv('concorrencia-catalogo.csv', [['MLB', x => x.item], ['SKU', x => x.sku], ['Anúncio', x => x.titulo], ['Conta', x => lojaTxt(x.loja)],
+      ['Situação', x => (SIT[x.status] || [x.status])[0]], ['Motivo', x => x.motivos.map(m => MOTIVO[m] || m).join(' | ')], ['Seu preço', x => x.preco == null ? '' : num2(x.preco)],
+      ['Preço p/ ganhar', x => x.precoGanhar == null ? '' : num2(x.precoGanhar)], ['Vencedor', x => x.vencedor?.item || ''], ['Preço do vencedor', x => x.vencedor?.preco == null ? '' : num2(x.vencedor.preco)],
+      ['Vencedor é seu', x => x.vencedor?.minhaLoja ? lojaTxt(x.vencedor.minhaLoja) : ''], ['Vencedor tem a mais', x => x.falta.join(' | ')], ['Vendas 30d', x => num2(x.receita)], ['Unidades 30d', x => x.unidades]], cur);
+    draw();
   };
 
   // ═════════ VISÃO DO DIA ═════════

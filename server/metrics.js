@@ -294,4 +294,53 @@ export function registrar(app, { H, lojasSel, dias }) {
     });
     return { categorias: cats, cat: id || null, nome: id ? cat(id).caminho : null, dia: R?.dia || null, diaAnterior: R?.diaAnterior || null, lista };
   }));
+
+  // ═════════ Concorrência: o que o próprio ML informa da disputa com outros vendedores ═════════
+  // Catálogo: /items/{id}/price_to_win de cada anúncio de catálogo ativo (situação, preço para ganhar, vencedor e o que ele tem a mais).
+  // Ads: detalhe de cada campanha nos últimos 30 dias (parcela de impressões, perdidas por orçamento/classificação, share of voice, ACOS de referência).
+  app.get('/api/nm/concorrencia', H(q => {
+    const lojas = lojasSel(q), ph = lojas.map(() => '?').join(','), meta = itensMeta(), w = janela(30), cur = calcular({ lojas, desde: w.ini });
+    const vendas = Object.fromEntries(cur.porItem.map(p => [p.loja + ':' + p.item, p]));
+    // vencedor que é anúncio seu (de qualquer conta, inclusive de outra loja sua)
+    const meus = {}; for (const k of Object.keys(meta)) meus[k.split(':')[1]] = k.split(':')[0];
+    const hist = {};
+    for (const r of db.prepare(`SELECT loja, chave, body FROM raw WHERE recurso='price_to_win_hist' AND status=200 AND loja IN (${ph})`).iterate(...lojas)) {
+      const [id, dia] = r.chave.split('|'); (hist[r.loja + ':' + id] ||= {})[dia] = parse(r.body)?.status;
+    }
+    const catalogo = [];
+    for (const r of db.prepare(`SELECT loja, chave, body, coletado_em FROM raw WHERE recurso='price_to_win' AND status=200 AND loja IN (${ph})`).iterate(...lojas)) {
+      const k = r.loja + ':' + r.chave, mi = meta[k];
+      if (!mi || mi.status !== 'active' || !mi.catalogo) continue;
+      const b = parse(r.body) || {}, v = vendas[k], h = hist[k] || {}, dias = Object.keys(h).sort(), hj = diaBR(new Date(r.coletado_em).toISOString());
+      // desde quando está na situação atual (pelas fotos diárias) e como estava no dia anterior
+      let desde = null; for (let i = dias.length - 1; i >= 0 && h[dias[i]] === b.status; i--) desde = dias[i];
+      const dAnt = dias.filter(d => d < hj).at(-1), wb = b.winner?.boosts, mb = b.boosts || [];
+      const vence = b.winner?.item_id && b.winner.item_id !== r.chave ? b.winner.item_id : null;
+      catalogo.push({ k, loja: r.loja, item: r.chave, sku: mi.sku, titulo: mi.titulo, thumb: mi.thumb, catalogo: true, tipo: mi.tipo, lg: mi.lg, estoque: mi.estoque,
+        prod: b.catalog_product_id || mi.prod || null, status: b.status || null, motivos: b.reason || [],
+        preco: b.current_price ?? mi.preco ?? null, precoGanhar: b.price_to_win ?? null,
+        dif: b.current_price != null && b.price_to_win != null ? r2(b.current_price - b.price_to_win) : null,
+        dividindo: b.competitors_sharing_first_place ?? null, visibilidade: b.visit_share || null,
+        vencedor: vence ? { item: vence, preco: b.winner.price ?? null, minhaLoja: meus[vence] || null } : null,
+        // o que o vencedor tem e você não (Full, frete grátis, envio no dia...) e o que você ainda pode ativar
+        falta: wb ? wb.filter(x => x.status === 'boosted' && !mb.some(y => y.id === x.id && y.status === 'boosted')).map(x => x.description) : [],
+        oportunidades: mb.filter(x => x.status === 'opportunity').map(x => x.description),
+        receita: r2(v?.receita || 0), unidades: v?.unidades || 0, lucroUn: v?.unidades ? r2(v.lucro / v.unidades) : null,
+        desde, ontem: dAnt ? h[dAnt] ?? null : null, diaAnterior: dAnt || null, coletado: r.coletado_em });
+    }
+    const ads = [];
+    for (const r of db.prepare(`SELECT loja, chave, body, coletado_em FROM raw WHERE recurso='ads_campaign_30d' AND status=200 AND loja IN (${ph})`).iterate(...lojas)) {
+      const b = parse(r.body) || {}, m = b.metrics || {};
+      ads.push({ loja: r.loja, id: r.chave, nome: b.name || r.chave, status: b.status || null, estrategia: b.strategy || null, acosAlvo: b.acos_target ?? null, orcamento: b.budget ?? null,
+        custo: m.cost ?? 0, receita: m.total_amount ?? 0, unidades: m.units_quantity ?? 0, cliques: m.clicks ?? 0, impressoes: m.prints ?? 0, acos: m.acos ?? null, acosRef: m.acos_benchmark || null,
+        // impression_share e as perdas vêm como fração (0,05 = 5%); sov e ACOS vêm em %
+        parcela: m.impression_share ?? null, topo: m.top_impression_share ?? null, perdaOrcamento: m.lost_impression_share_by_budget ?? null,
+        perdaClassificacao: m.lost_impression_share_by_ad_rank ?? null, sov: m.sov ?? null, coletado: r.coletado_em });
+    }
+    ads.sort((a, b) => b.custo - a.custo || b.impressoes - a.impressoes);
+    const n = s => catalogo.filter(x => x.status === s).length, perdendo = catalogo.filter(x => x.status === 'competing' || x.status === 'listed');
+    return { desde: w.ini, catalogo: catalogo.sort((a, b) => b.receita - a.receita), ads,
+      resumo: { anuncios: catalogo.length, ganhando: n('winning'), dividindo: n('sharing_first_place'), perdendo: n('competing'), semCompetir: n('listed') + n('not_listed'),
+        receitaPerdendo: r2(perdendo.reduce((t, x) => t + x.receita, 0)), paraVoce: catalogo.filter(x => x.vencedor?.minhaLoja).length } };
+  }));
 }

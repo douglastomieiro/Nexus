@@ -86,6 +86,12 @@ async function itens(c) {
     await c.fetchSave('item_sale_price', id, `/items/${id}/sale_price`, { maxAge: 3 * HORA });
     await c.fetchSave('item_promos', id, `/seller-promotions/items/${id}?app_version=v2`, { maxAge: 3 * HORA });
   });
+  // Nexus Metrics › Concorrência: disputa de cada anúncio de catálogo ativo (situação, preço para ganhar, vencedor e o que falta), a cada 3h + foto do dia
+  const catalogo = listRaw(c.loja, 'item').filter(i => i.body.status === 'active' && i.body.catalog_listing).map(i => i.chave);
+  await pool(catalogo, CONC, async id => {
+    await c.fetchSave('price_to_win', id, `/items/${id}/price_to_win?siteId=MLB&version=v2`, { maxAge: 3 * HORA });
+    fotoDoDia(c.loja, 'price_to_win', id);
+  });
   // dados lentos: 1x por dia
   await pool(ativos, CONC, async id => {
     await c.fetchSave('item_description', id, `/items/${id}/description`, { maxAge: DIA });
@@ -265,7 +271,7 @@ async function categorias(c) {
   await pool([...prods], CONC, id => c.fetchSave('product', id, `/products/${id}`, { maxAge: DIA }));
   await pool([...ups], CONC, id => c.fetchSave('user_product', id, `/user-products/${id}`, { maxAge: DIA }));
   // histórico: guarda 120 dias de fotos
-  db.prepare(`DELETE FROM raw WHERE loja=? AND recurso IN ('trends_category_hist','highlights_category_hist','trends_mlb_hist') AND substr(chave,-10) < ?`)
+  db.prepare(`DELETE FROM raw WHERE loja=? AND recurso IN ('trends_category_hist','highlights_category_hist','trends_mlb_hist','price_to_win_hist') AND substr(chave,-10) < ?`)
     .run(c.loja, new Date(Date.now() - 120 * DIA).toISOString().slice(0, 10));
 }
 // foto diária de um recurso (tendências / mais vendidos), para a posição de hoje ser comparada com a dos dias anteriores. Chave: <chave>|<dia de Brasília>
@@ -311,6 +317,11 @@ async function ads(c) {
   await paginar(`${base}/campaigns/search?${q}`, x => { camps.push(x); saveRaw(c.loja, 'ads_campaign', x.id, 'campaigns/search', 200, x); });
   await paginar(`${base}/ads/search?${q}`, x => { anuncios.push(x); saveRaw(c.loja, 'ads_ad', x.item_id, 'ads/search', 200, x); });
   c.log(`ads: ${camps.length} campanhas, ${anuncios.length} anúncios`);
+  // Nexus Metrics › Concorrência: parcela de impressões, impressões perdidas (orçamento / classificação), share of voice e ACOS de referência.
+  // Essas métricas só existem no detalhe da campanha (o /campaigns/search as recusa); janela de 30 dias.
+  const de30 = new Date(Date.now() - 29 * DIA).toISOString().slice(0, 10);
+  const MC = 'clicks,prints,cost,acos,total_amount,units_quantity,sov,impression_share,top_impression_share,lost_impression_share_by_budget,lost_impression_share_by_ad_rank,acos_benchmark';
+  await pool(camps, CONC, x => c.fetchSave('ads_campaign_30d', x.id, `/advertising/MLB/product_ads/campaigns/${x.id}?date_from=${de30}&date_to=${to}&metrics=${MC}`, { headers: H }));
   // série diária da conta (90 dias)
   await c.fetchSave('ads_daily', 'conta', `${base}/ads/search?${q}&aggregation_type=daily&limit=1`, { headers: H });
   // série diária por anúncio que teve custo (usada para ratear o custo de Ads entre os pedidos)
