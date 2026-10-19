@@ -8,7 +8,7 @@ ML_CLIENT_ID = "2746964471058760"
 
 # Endereço do site web (GitHub Pages), com a barra final. Só ele pode usar o login e o repasse das chamadas pelo navegador.
 # Deixe vazio (ou apague a linha) para desligar o site e manter só o app instalado.
-WEB_URL = "https://SEU-USUARIO.github.io/NOME-DO-REPOSITORIO/"
+WEB_URL = "https://douglastomieiro.github.io/Nexus/"
 
 # A senha do app NÃO fica aqui. Grave-a como secret:
 #   npx wrangler secret put ML_CLIENT_SECRET
