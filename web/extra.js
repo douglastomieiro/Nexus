@@ -8,14 +8,16 @@ const mesNome = m => { const [y, mm] = m.split('-'); return ['jan', 'fev', 'mar'
 
 // DRE com meses em colunas: seções escuras, subtotais em destaque e coluna de total (estilo Jodda). Linhas = {mes, receita, comissao, frete, imposto, custo, adsTotal, perdaDevolucao, outras, final, ...}
 // cats = categorias de custo fixo (com elas, o DRE ganha a seção CUSTOS FIXOS e o lucro líquido; x.fixos = { categoria: valor }, x.liquido)
-function dreTabela(linhas, cats = []) {
+// total: false tira a coluna Total (DRE de um mês só, com o anterior ao lado)
+function dreTabela(linhas, cats = [], { total = true } = {}) {
   const L = linhas.slice().sort((a, b) => a.mes.localeCompare(b.mes));
   const sm = (k, f) => L.reduce((t, x) => t + f(x), 0);
   const mc = x => x.receita - x.comissao - x.frete - x.imposto - x.custo;
   const aj = x => x.final - (mc(x) - x.adsTotal - x.perdaDevolucao - x.outras); // reembolsos parciais, vendas mantidas por cobertura etc.
   const cel = (v, o = {}, x) => `<td class="n ${o.c || ''}">${o.pct ? pct(v) : o.neg ? (v ? '(−) ' + brl(Math.abs(v)) : brl(0)) : brl(v)}${o.nota && x ? o.nota(x) : ''}</td>`;
-  const sec = t => `<tr class="sec"><td colspan="${L.length + 2}">${t}</td></tr>`;
-  const row = (nome, f, o = {}) => `<tr class="${o.cls || ''}"><td class="lb">${nome}</td>${L.map(x => cel(f(x), o, x)).join('')}${cel(o.pct ? (o.tot ? o.tot() : 0) : sm(0, f), { ...o, nota: null })}</tr>`;
+  const T = html => (total ? html : '');
+  const sec = t => `<tr class="sec"><td colspan="${L.length + (total ? 2 : 1)}">${t}</td></tr>`;
+  const row = (nome, f, o = {}) => `<tr class="${o.cls || ''}"><td class="lb">${nome}</td>${L.map(x => cel(f(x), o, x)).join('')}${T(cel(o.pct ? (o.tot ? o.tot() : 0) : sm(0, f), { ...o, nota: null }))}</tr>`;
   const totRec = sm(0, x => x.receita);
   const out = [
     sec('RECEITA'),
@@ -33,12 +35,12 @@ function dreTabela(linhas, cats = []) {
       sec('CUSTOS FIXOS'),
       ...cats.map(c => row(`(−) ${esc(c)}`, x => x.fixos[c] || 0, { neg: 1 })),
       row('(=) LUCRO LÍQUIDO', x => x.liquido, { cls: 'tot', c: '' }),
-      `<tr class="eq"><td class="lb">Margem líquida</td>${L.map(x => `<td class="n">${pct(x.receita ? x.liquido / x.receita : 0)}</td>`).join('')}<td class="n">${pct(totRec ? sm(0, x => x.liquido) / totRec : 0)}</td></tr>`,
+      `<tr class="eq"><td class="lb">Margem líquida</td>${L.map(x => `<td class="n">${pct(x.receita ? x.liquido / x.receita : 0)}</td>`).join('')}${T(`<td class="n">${pct(totRec ? sm(0, x => x.liquido) / totRec : 0)}</td>`)}</tr>`,
     ] : [row('(=) LUCRO FINAL', x => x.final, { cls: 'tot', c: '' })]),
-    `<tr class="eq"><td class="lb">Margem ${cats.length ? 'antes dos custos fixos' : 'final'}</td>${L.map(x => `<td class="n">${pct(x.margem)}</td>`).join('')}<td class="n">${pct(totRec ? sm(0, x => x.final) / totRec : 0)}</td></tr>`,
-    `<tr class="eq"><td class="lb">Pedidos</td>${L.map(x => `<td class="n">${num(x.pedidos)}</td>`).join('')}<td class="n">${num(sm(0, x => x.pedidos))}</td></tr>`,
+    `<tr class="eq"><td class="lb">Margem ${cats.length ? 'antes dos custos fixos' : 'final'}</td>${L.map(x => `<td class="n">${pct(x.margem)}</td>`).join('')}${T(`<td class="n">${pct(totRec ? sm(0, x => x.final) / totRec : 0)}</td>`)}</tr>`,
+    `<tr class="eq"><td class="lb">Pedidos</td>${L.map(x => `<td class="n">${num(x.pedidos)}</td>`).join('')}${T(`<td class="n">${num(sm(0, x => x.pedidos))}</td>`)}</tr>`,
   ];
-  return `<div class="tw dre"><table id="tdre"><thead><tr><th>${'Demonstrativo'}</th>${L.map(x => `<th class="n">${mesNome(x.mes)}</th>`).join('')}<th class="n">Total</th></tr></thead><tbody>${out.join('')}</tbody></table></div>`;
+  return `<div class="tw dre"><table id="tdre"><thead><tr><th>${'Demonstrativo'}</th>${L.map(x => `<th class="n">${mesNome(x.mes)}</th>`).join('')}${T('<th class="n">Total</th>')}</tr></thead><tbody>${out.join('')}</tbody></table></div>`;
 }
 
 // Caixa "Custos fixos do negócio" do DRE: lista, cadastra, altera e exclui. Valor por mês, com mês de início e (se tiver) de fim.
@@ -101,7 +103,8 @@ Object.assign(VIEWS, {
   },
 
   // ───────── FINANCEIRO (DRE) ─────────
-  async dre() {
+  // arg (hash dre:<arg>): '12m' | '6m' | '3m' (últimos N meses) ou 'AAAA-MM' (um mês, com o anterior ao lado para comparar)
+  async dre(arg) {
     const d = await api('dre', '&meses=12');
     const hojeBR = new Date(Date.now() - 3 * 3600e3 - 89 * 864e5).toISOString().slice(0, 7);
     const g = {};
@@ -116,7 +119,7 @@ Object.assign(VIEWS, {
     d.faturas.forEach(f => { const o = fat[f.mes] ||= { n: 0, outras: 0, ads: 0, parcelamento: 0, devolucao: 0 };
       o.n++; o.outras += ['full', 'eshop', 'difal', 'outros'].reduce((t, k) => t + (f.classes[k] || 0), 0); o.ads += f.classes.ads || 0;
       o.parcelamento += f.classes.parcelamento || 0; o.devolucao += f.classes.devolucao || 0; });
-    const linhas = Object.values(g).sort((a, b) => a.mes.localeCompare(b.mes)).map(m => {
+    const todas = Object.values(g).sort((a, b) => a.mes.localeCompare(b.mes)).map(m => {
       const f = fat[m.mes];
       const coberto = m.mes > hojeBR; // mês inteiro dentro da janela de 90 dias da API de Ads
       const adsApi = m.ads + m.adsSemVenda;
@@ -128,30 +131,42 @@ Object.assign(VIEWS, {
       const fixos = d.fixos?.[m.mes] || {}, fixosTotal = Object.values(fixos).reduce((t, v) => t + v, 0);
       return { ...m, adsTotal, adsFonte: coberto || !f ? 'API' : 'fatura', outras, semFatura: !f, final, margem: m.receita ? final / m.receita : 0, fixos, fixosTotal, liquido: final - fixosTotal };
     });
-    const tot = k => linhas.reduce((t, x) => t + x[k], 0);
+    // período escolhido: os cartões somam só ele; com um mês só, a tabela mostra também o mês anterior para comparar
+    const sel = todas.some(x => x.mes === arg) ? arg : ['12m', '6m', '3m'].includes(arg) ? arg : '12m', umMes = !sel.endsWith('m');
+    const linhas = umMes ? todas.filter(x => x.mes === sel) : todas.slice(-parseInt(sel));
+    const tabela = umMes ? todas.filter(x => x.mes <= sel).slice(-2) : linhas;
+    const rot = umMes ? mesNome(sel) : linhas.length === todas.length && sel === '12m' ? '12 meses' : `${linhas.length} meses`;
+    const tot = k => linhas.reduce((t, x) => t + x[k], 0), fats = d.faturas.filter(f => linhas.some(x => x.mes === f.mes));
     // categorias de custo fixo que aparecem nos meses do DRE, da maior para a menor
-    const catTot = {}; linhas.forEach(x => Object.entries(x.fixos).forEach(([c, v]) => { catTot[c] = (catTot[c] || 0) + v; }));
+    const catTot = {}; tabela.forEach(x => Object.entries(x.fixos).forEach(([c, v]) => { catTot[c] = (catTot[c] || 0) + v; }));
     const cats = Object.keys(catTot).sort((a, b) => catTot[b] - catTot[a]), comFixos = cats.length > 0;
     const aviso = [];
     if (d.cobertura.pctReceitaSemCusto > 0.01) aviso.push(`${pct(d.cobertura.pctReceitaSemCusto)} da receita sem custo de produto cadastrado — lucro superestimado.`);
     if (d.cobertura.pctReceitaFreteEstimado > 0.01) aviso.push(`${pct(d.cobertura.pctReceitaFreteEstimado)} da receita com frete estimado (coleta histórica ainda em andamento ou frete indisponível).`);
-    $('#view').innerHTML = aviso.map(a => `<div class="box" style="border-color:var(--warn);margin-bottom:10px">⚠ ${a}</div>`).join('') + `<div class="cards">
-      ${card2('Receita (12 meses)', brl(tot('receita')))}${comFixos
-        ? card2('Lucro antes dos custos fixos', brl(tot('final')), tot('final') < 0 ? 'bad' : 'ok') + card2('Custos fixos (12 meses)', '−' + brl(tot('fixosTotal')), 'warn')
-          + card2('Lucro líquido (12 meses)', brl(tot('liquido')), tot('liquido') < 0 ? 'bad' : 'ok') + card2('Margem líquida', pct(tot('receita') ? tot('liquido') / tot('receita') : 0))
-        : card2('Lucro final (12 meses)', brl(tot('final')), tot('final') < 0 ? 'bad' : 'ok') + card2('Margem final', pct(tot('receita') ? tot('final') / tot('receita') : 0))}
-      ${card2('Imposto (12 meses)', '−' + brl(tot('imposto')))}${card2('Outras cobranças da fatura', '−' + brl(tot('outras')), 'warn')}${card2('Devolvido ao comprador', brl(tot('devolvido')), 'bad')}</div>
-      <div class="box" style="margin-bottom:14px"><h3>Lucro final e margem por mês</h3><div style="height:260px"><canvas id="c1"></canvas></div></div>
-      <div class="box" style="margin-bottom:14px"><h3>DRE mensal <small>(mês = data do pedido, fuso de Brasília)</small></h3>${dreTabela(linhas, cats)}
-        <p style="color:var(--mut);margin:8px 0 0;font-size:12px">Receita já desconta devoluções (pedidos reembolsados saem da receita). “Outras (fatura)” = serviços do Full (armazenagem, coleta, inconformidade), eShop, DIFAL e cobranças não identificadas, líquidas das bonificações. <b>Não</b> entram aqui: a taxa de parcelamento (CFONPN — acréscimo pago pelo comprador e repassado ao Mercado Pago, soma zero para você) e as tarifas de devolução (já contadas pedido a pedido em “Perda devol.”). Ads: API de Ads nos meses inteiros dentro dos últimos 90 dias; antes disso, o valor da fatura. Atenção: a fatura do ML é por <b>período de cobrança</b> (≈ dia 16 do mês anterior ao dia 15), não por mês-calendário — “Outras” e o Ads da fatura são aproximações do mês. O mês corrente usa a fatura ainda em aberto (parcial).${comFixos ? ' Custos fixos: valor do mês inteiro, inclusive no mês corrente (que ainda está com as vendas pela metade).' : ''}</p></div>
+    const opcoes = [['12m', 'Últimos 12 meses'], ['6m', 'Últimos 6 meses'], ['3m', 'Últimos 3 meses'], ...todas.slice().reverse().map(x => [x.mes, `Só ${mesNome(x.mes)}${x.mes === todas.at(-1).mes ? ' (mês atual, parcial)' : ''}`])];
+    $('#view').innerHTML = `<div class="box" style="padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px;font-weight:600">Período do DRE
+        <select id="drep" style="padding:7px 9px;border:1px solid var(--bd);border-radius:7px;font:inherit">${opcoes.map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
+        ${umMes ? `<small style="color:var(--mut)">a tabela mostra ${tabela.length > 1 ? `${mesNome(tabela[0].mes)} ao lado para comparar` : 'só este mês'}</small>` : ''}</div>`
+      + aviso.map(a => `<div class="box" style="border-color:var(--warn);margin-bottom:10px">⚠ ${a}</div>`).join('') + `<div class="cards">
+      ${card2(`Receita (${rot})`, brl(tot('receita')))}${comFixos
+        ? card2('Lucro antes dos custos fixos', brl(tot('final')), tot('final') < 0 ? 'bad' : 'ok') + card2(`Custos fixos (${rot})`, '−' + brl(tot('fixosTotal')), 'warn')
+          + card2(`Lucro líquido (${rot})`, brl(tot('liquido')), tot('liquido') < 0 ? 'bad' : 'ok') + card2('Margem líquida', pct(tot('receita') ? tot('liquido') / tot('receita') : 0))
+        : card2(`Lucro final (${rot})`, brl(tot('final')), tot('final') < 0 ? 'bad' : 'ok') + card2('Margem final', pct(tot('receita') ? tot('final') / tot('receita') : 0))}
+      ${card2(`Imposto (${rot})`, '−' + brl(tot('imposto')))}${card2('Outras cobranças da fatura', '−' + brl(tot('outras')), 'warn')}
+      ${card2('Perda real com devoluções', tot('perdaDevolucao') >= 0 ? '−' + brl(tot('perdaDevolucao')) : '+' + brl(-tot('perdaDevolucao')), tot('perdaDevolucao') > 0 ? 'bad' : 'ok')}${card2(`Estornado em pedidos cancelados <span title="Valor que voltou ao comprador nos pedidos cancelados com reembolso (a maioria cancelada antes do envio). Esses pedidos já estão fora da receita: não é prejuízo. O que você perdeu de fato está em “Perda real com devoluções”." style="cursor:help">ⓘ</span>`, brl(tot('devolvido')))}</div>
+      ${umMes ? '' : `<div class="box" style="margin-bottom:14px"><h3>${comFixos ? 'Lucro líquido' : 'Lucro final'} e margem por mês</h3><div style="height:260px"><canvas id="c1"></canvas></div></div>`}
+      <div class="box" style="margin-bottom:14px"><h3>${umMes ? `DRE de ${mesNome(sel)}` : 'DRE mensal'} <small>(mês = data do pedido, fuso de Brasília)</small></h3>${dreTabela(tabela, cats, { total: !umMes })}
+        <p style="color:var(--mut);margin:8px 0 0;font-size:12px">Receita já desconta devoluções (pedidos reembolsados saem da receita). Por isso o “estornado em pedidos cancelados” não é descontado de novo: o que entra no resultado é a perda real (frete, tarifa de devolução e comissão não estornados). “Outras (fatura)” = serviços do Full (armazenagem, coleta, inconformidade), eShop, DIFAL e cobranças não identificadas, líquidas das bonificações. <b>Não</b> entram aqui: a taxa de parcelamento (CFONPN — acréscimo pago pelo comprador e repassado ao Mercado Pago, soma zero para você) e as tarifas de devolução (já contadas pedido a pedido em “Perda devol.”). Ads: API de Ads nos meses inteiros dentro dos últimos 90 dias; antes disso, o valor da fatura. Atenção: a fatura do ML é por <b>período de cobrança</b> (≈ dia 16 do mês anterior ao dia 15), não por mês-calendário — “Outras” e o Ads da fatura são aproximações do mês. O mês corrente usa a fatura ainda em aberto (parcial).${comFixos ? ' Custos fixos: valor do mês inteiro, inclusive no mês corrente (que ainda está com as vendas pela metade).' : ''}</p></div>
       <div class="box" style="margin-bottom:14px" id="cfbox"></div>
-      <div class="box"><h3>Faturas do Mercado Livre (cobranças por tipo, já líquidas das bonificações)</h3>${d.faturas.length ? d.faturas.slice().reverse().map(f => `<details style="margin-bottom:6px"><summary style="cursor:pointer">${ln(f)} ${esc(f.grupo === 'MP' ? 'Mercado Pago' : 'Mercado Livre')} · fatura ${esc(f.key)} · <b>${brl(f.total)}</b>
+      <div class="box"><h3>Faturas do Mercado Livre (cobranças por tipo, já líquidas das bonificações)</h3>${fats.length ? fats.slice().reverse().map(f => `<details style="margin-bottom:6px"><summary style="cursor:pointer">${ln(f)} ${esc(f.grupo === 'MP' ? 'Mercado Pago' : 'Mercado Livre')} · fatura ${esc(f.key)} · <b>${brl(f.total)}</b>
         ${Object.entries(f.classes).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span class="tag">${esc(k)} ${brl(v)}</span>`).join(' ')}</summary>
         ${tbl([{ t: 'Tipo', k: 'tipo' }, { t: 'Descrição', k: 'label' }, { t: 'Classe', k: 'classe' }, { t: 'Valor', n: 1, f: r => `<span class="${r.valor < 0 ? 'ok' : ''}">${brl(r.valor)}</span>` }], f.linhas)}</details>`).join('') : '<p style="color:var(--mut)">Fatura ainda não coletada (a coleta roda às 04:30 e é lenta: limite de 5 chamadas por minuto).</p>'}</div>`;
-    mk('#c1', { type: 'bar', data: { labels: linhas.map(x => mesNome(x.mes)), datasets: [{ type: 'line', label: 'Margem %', yAxisID: 'y2', borderColor: '#f59e0b', backgroundColor: '#f59e0b', data: linhas.map(x => +((comFixos ? (x.receita ? x.liquido / x.receita : 0) : x.margem) * 100).toFixed(1)) },
+    if (!umMes) mk('#c1', { type: 'bar', data: { labels: linhas.map(x => mesNome(x.mes)), datasets: [{ type: 'line', label: 'Margem %', yAxisID: 'y2', borderColor: '#f59e0b', backgroundColor: '#f59e0b', data: linhas.map(x => +((comFixos ? (x.receita ? x.liquido / x.receita : 0) : x.margem) * 100).toFixed(1)) },
       { label: comFixos ? 'Lucro líquido' : 'Lucro final', backgroundColor: '#3ecf8e', data: linhas.map(x => comFixos ? x.liquido : x.final) }, { label: 'Receita', backgroundColor: '#4da3ff55', data: linhas.map(x => x.receita) }] },
       options: { ...ch, scales: { ...ch.scales, y2: { position: 'right', ticks: { color: '#d97706', callback: v => v + '%' }, grid: { display: false } } } } });
-    custosFixos($('#cfbox'), () => VIEWS.dre());
+    // sem await (o DRE já está na tela); STALE = o usuário trocou de tela antes de a caixa carregar
+    custosFixos($('#cfbox'), () => VIEWS.dre(sel)).catch(e => { if (e !== STALE && $('#cfbox')) $('#cfbox').innerHTML = `<p class="bad" style="margin:0">Não foi possível carregar os custos fixos: ${esc(e.message)}</p>`; });
+    $('#drep').onchange = () => { location.hash = 'dre:' + $('#drep').value; };
   },
 
   // ───────── DEVOLUÇÕES ─────────
