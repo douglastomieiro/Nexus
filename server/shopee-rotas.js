@@ -133,7 +133,7 @@ export function registrarShopee(app, { H }) {
 
 // Alertas da Shopee (somados aos do ML na tela Alertas). `lojasMl` = lojas selecionadas no filtro (loja1/loja2).
 export function alertasShopee(lojasMl) {
-  const lojas = lojasMl.map(l => DE_ML[l]).filter(Boolean), A = [];
+  const lojas = lojasMl.map(spDe).filter(l => NOMES[l]), A = [];
   if (!lojas.length) return A;
   const add = (nivel, titulo, detalhe, view, itens = []) => A.push({ nivel, titulo: '[Shopee] ' + titulo, detalhe, view, itens });
   const h = brHoje(), d30 = iso(new Date(h - 29 * 864e5)), d90 = iso(new Date(h - 89 * 864e5));
