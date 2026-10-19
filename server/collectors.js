@@ -1,7 +1,7 @@
 // Coletores v2 — paralelos, incrementais e só com detalhe do que está em aberto.
 // O resto (detalhe de pedido/envio/reclamação antigos) é buscado sob demanda em /api/live.
 import { mlGet } from './ml.js';
-import { saveRaw, getRaw, listRaw } from './db.js';
+import { db, saveRaw, getRaw, listRaw } from './db.js';
 
 const MIN = 60e3, HORA = 60 * MIN, DIA = 24 * HORA;
 const CONC = 6;
@@ -256,7 +256,22 @@ async function categorias(c) {
     await c.fetchSave('category_attributes', id, `/categories/${id}/attributes`, { maxAge: 30 * DIA });
     await c.fetchSave('trends_category', id, `/trends/MLB/${id}`, { maxAge: DIA });
     await c.fetchSave('highlights_category', id, `/highlights/MLB/category/${id}`, { maxAge: DIA });
+    fotoDoDia(c.loja, 'trends_category', id); fotoDoDia(c.loja, 'highlights_category', id);
   });
+  fotoDoDia(c.loja, 'trends_mlb', c.user);
+  // Nexus Metrics › Mais vendidos: o /highlights só traz posição e ID; nome, foto e preço vêm do produto de catálogo (ou do user product)
+  const prods = new Set(), ups = new Set();
+  for (const h of listRaw(c.loja, 'highlights_category')) for (const x of h.body?.content || []) (x.type === 'PRODUCT' ? prods : x.type === 'USER_PRODUCT' ? ups : new Set()).add(x.id);
+  await pool([...prods], CONC, id => c.fetchSave('product', id, `/products/${id}`, { maxAge: DIA }));
+  await pool([...ups], CONC, id => c.fetchSave('user_product', id, `/user-products/${id}`, { maxAge: DIA }));
+  // histórico: guarda 120 dias de fotos
+  db.prepare(`DELETE FROM raw WHERE loja=? AND recurso IN ('trends_category_hist','highlights_category_hist','trends_mlb_hist') AND substr(chave,-10) < ?`)
+    .run(c.loja, new Date(Date.now() - 120 * DIA).toISOString().slice(0, 10));
+}
+// foto diária de um recurso (tendências / mais vendidos), para a posição de hoje ser comparada com a dos dias anteriores. Chave: <chave>|<dia de Brasília>
+function fotoDoDia(loja, recurso, chave) {
+  const ex = getRaw(loja, recurso, chave);
+  if (ex?.status === 200) saveRaw(loja, recurso + '_hist', `${chave}|${new Date(ex.coletado_em - 3 * HORA).toISOString().slice(0, 10)}`, '', 200, ex.body);
 }
 
 // ───────────── FATURAMENTO / FATURA DO ML (diário; limite de 5 req/min) ─────────────

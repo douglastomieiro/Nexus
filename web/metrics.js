@@ -5,19 +5,21 @@
   ICO.metrics = '<path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/><circle cx="19" cy="7" r="1.5"/>';
   ICO.nmdia = ICO.cal; ICO.nmprojecao = ICO.rocket; ICO.nmcategorias = ICO.catalogo; ICO.nmanuncios = ICO.abc; ICO.nmclientes = ICO.reputacao || ICO.pedidos;
   ICO.nmotimiza = ICO.bulb; ICO.nmcrescimento = ICO.indicadores;
-  const tabs = [['nmdia', 'Visão do dia'], ['nmprojecao', 'Projete suas vendas'], ['nmcategorias', 'Suas categorias'], ['nmanuncios', 'Performance de vendas'], ['nmclientes', 'Seus clientes'], ['nmotimiza', 'Otimize seus anúncios'], ['nmcrescimento', 'Crescimento']];
+  ICO.nmbuscas = ICO.search; ICO.nmmaisvendidos = ICO.trophy;
+  const tabs = [['nmbuscas', 'Top buscas'], ['nmmaisvendidos', 'Mais vendidos'], ['nmdia', 'Visão do dia'], ['nmprojecao', 'Projete suas vendas'], ['nmcategorias', 'Suas categorias'], ['nmanuncios', 'Performance de vendas'], ['nmclientes', 'Seus clientes'], ['nmotimiza', 'Otimize seus anúncios'], ['nmcrescimento', 'Crescimento']];
   if (!GRUPOS.some(g => g.n === 'Nexus Metrics')) {
     const i = GRUPOS.findIndex(g => g.n === 'Configurações');
     GRUPOS.splice(i < 0 ? GRUPOS.length : i, 0, { n: 'Nexus Metrics', ico: 'metrics', tabs });
   }
   Object.assign(SUB, {
+    nmbuscas: 'O que mais se busca no Mercado Livre e nas suas categorias, e se você tem anúncio para cada busca', nmmaisvendidos: 'Os 20 mais vendidos de cada categoria em que você vende, e onde você está',
     nmdia: 'Como estão as vendas de hoje comparadas com o seu ritmo normal', nmprojecao: 'Para onde o mês está indo e de onde vem o faturamento',
     nmcategorias: 'Seu desempenho e peso em cada categoria em que você vende', nmanuncios: 'Os anúncios que movem o seu faturamento (e os que não vendem)',
     nmclientes: 'Quem compra de você, quanto e com que frequência', nmotimiza: 'Qualidade dos anúncios segundo o ML, priorizada pelo peso de cada um nas vendas',
     nmcrescimento: 'Evolução do seu negócio mês a mês',
   });
   Object.assign(PERIODO, { nmcategorias: 1, nmanuncios: 1, nmclientes: 1 });
-  Object.assign(NOTA, { nmdia: 'Hoje vs. média dos últimos 30 dias', nmprojecao: 'Mês escolhido na própria tela', nmotimiza: 'Anúncios ativos · vendas e visitas dos últimos 30 dias', nmcrescimento: 'Últimos 13 meses' });
+  Object.assign(NOTA, { nmbuscas: 'Ranking do ML de hoje · categoria escolhida na própria tela', nmmaisvendidos: 'Top 20 do ML de hoje · categoria escolhida na própria tela', nmdia: 'Hoje vs. média dos últimos 30 dias', nmprojecao: 'Mês escolhido na própria tela', nmotimiza: 'Anúncios ativos · vendas e visitas dos últimos 30 dias', nmcrescimento: 'Últimos 13 meses' });
 
   // ───────── helpers ─────────
   const tags = x => [x.catalogo ? '<span class="sg b">catálogo</span>' : '', x.tipo ? `<span class="sg n">${esc(x.tipo)}</span>` : '', x.lg ? `<span class="sg ${x.lg === 'Full' ? 'g' : x.lg === 'Flex' ? 'a' : 'n'}">${esc(x.lg)}</span>` : ''].join(' ');
@@ -32,6 +34,54 @@
     options: { ...ch, plugins: { ...ch.plugins, ...tipBrl }, scales: { x: { ...ch.scales.x, title: { display: true, text: 'dia do mês' } }, y: { ...ch.scales.y, ticks: { ...ch.scales.y.ticks, callback: v => num(v) } } } } });
   const rosca = (id, lista) => mk(id, { type: 'doughnut', data: { labels: lista.map(x => x.nome), datasets: [{ data: lista.map(x => x.receita), backgroundColor: PAL, borderWidth: 2, borderColor: '#fff' }] }, options: donut() });
   const filtros = (id, html) => `<div class="fgrid" id="${id}">${html}</div>`;
+
+  // ═════════ MERCADO: helpers ═════════
+  const mov = x => x.novo ? '<span class="sg g">novo</span>' : x.delta == null ? '<span style="color:var(--mut)">—</span>' : x.delta > 0 ? `<span class="dl up">▲ ${x.delta}</span>` : x.delta < 0 ? `<span class="dl dn">▼ ${-x.delta}</span>` : '<span style="color:var(--mut)">=</span>';
+  const seletorCat = (cats, atual, todas) => `<label style="min-width:260px">Categoria<select id="ncat">${todas ? `<option value="">${esc(todas)}</option>` : ''}${cats.map(c => `<option value="${esc(c.id)}" ${c.id === atual ? 'selected' : ''}>${esc(c.nome)}${c.meus ? ` · ${c.meus} seu(s) no top` : ''} — ${esc(c.raiz)}</option>`).join('')}</select></label>`;
+  const semHist = (d, oque) => d.diaAnterior ? '' : `<div class="note">O ML informa só a posição de hoje. A comparação com o dia anterior (▲ subiu, ▼ caiu, novo) aparece a partir da próxima coleta diária, quando o Nexus tiver a 2ª foto do ${oque}.</div>`;
+
+  // ═════════ TOP BUSCAS ═════════
+  VIEWS.nmbuscas = async function (arg) {
+    const d = await api('nm/buscas', `&cat=${encodeURIComponent(arg || '')}`), f = { sem: false };
+    const semAnuncio = d.lista.filter(x => !x.anuncios).length, subiram = d.lista.filter(x => x.delta > 0).length, novas = d.lista.filter(x => x.novo).length;
+    const linha = (x, hist) => `<tr><td class="n"><b>${hist ? Math.round(x.media) : x.pos}º</b></td><td><a class="lk" target="_blank" rel="noopener" href="${esc(x.url)}">${esc(x.keyword)}</a></td>
+      ${hist ? `<td class="n">${num(x.dias)} de ${num(d.fotos)}</td><td class="n">${x.melhor}º</td>` : `<td class="c">${mov(x)}</td>`}
+      <td class="c">${x.anuncios ? `<span class="sg g">${num(x.anuncios)} anúncio(s)</span>` : '<span class="sg r">sem anúncio seu</span>'}</td></tr>`;
+    $('#view').innerHTML = `<div class="box" style="padding:10px 14px">${filtros('nbf', seletorCat(d.categorias, d.cat, 'Todo o Mercado Livre'))}</div>
+      ${semHist(d, 'ranking de buscas')}
+      <div class="kgrid">${kpi('Buscas no ranking', num(d.lista.length), esc(d.nome), 'search', 'blue')}
+        ${kpi('Sem anúncio seu', num(semAnuncio), 'nenhum título seu tem todas as palavras da busca', 'alertas', semAnuncio ? 'red' : 'green')}
+        ${kpi('Subiram', d.diaAnterior ? num(subiram) : '—', d.diaAnterior ? `desde ${ddmm(d.diaAnterior)}` : 'aguardando a 2ª foto', 'rocket', 'green')}
+        ${kpi('Entraram no ranking', d.diaAnterior ? num(novas) : '—', d.diaAnterior ? `desde ${ddmm(d.diaAnterior)}` : 'aguardando a 2ª foto', 'bulb', 'amber')}</div>
+      <div class="two"><div class="box"><div class="boxh"><h3>Ranking de hoje <small>${d.dia ? ddmm(d.dia) : ''}</small></h3><label style="flex-direction:row;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="nbs"> só as sem anúncio seu</label></div>
+          <div class="tw" style="max-height:none"><table class="rt"><thead><tr><th class="n">#</th><th>Busca</th><th class="c">Movimento</th><th class="c">Você tem?</th></tr></thead><tbody id="nbt"></tbody></table></div></div>
+        <div class="box"><h3>Ranking do período <small>buscas que mais apareceram nos últimos 30 dias · ${num(d.fotos)} foto(s)</small></h3>
+          <div class="tw" style="max-height:none"><table class="rt"><thead><tr><th class="n">Posição média</th><th>Busca</th><th class="n">Dias no ranking</th><th class="n">Melhor</th><th class="c">Você tem?</th></tr></thead><tbody>${d.periodo.map(x => linha(x, true)).join('') || '<tr><td colspan="5" class="empty">Sem fotos ainda.</td></tr>'}</tbody></table></div></div></div>
+      <p style="color:var(--mut);font-size:12px">O Mercado Livre não informa quantas vezes cada termo foi buscado, só a ordem. "Você tem?" compara as palavras da busca com os títulos dos seus anúncios ativos.</p>`;
+    const draw = () => { $('#nbt').innerHTML = d.lista.filter(x => !f.sem || !x.anuncios).map(x => linha(x, false)).join('') || '<tr><td colspan="4" class="empty">Nada por aqui.</td></tr>'; };
+    $('#nbs').onchange = () => { f.sem = $('#nbs').checked; draw(); };
+    $('#ncat').onchange = () => { location.hash = 'nmbuscas:' + encodeURIComponent($('#ncat').value); };
+    draw();
+  };
+
+  // ═════════ MAIS VENDIDOS ═════════
+  VIEWS.nmmaisvendidos = async function (arg) {
+    const d = await api('nm/maisvendidos', `&cat=${encodeURIComponent(arg || '')}`);
+    if (!d.categorias.length) { $('#view').innerHTML = '<div class="box empty"><b>Ainda não há mais vendidos coletados.</b>A coleta diária busca o top 20 de cada categoria em que você tem anúncio.</div>'; return; }
+    const meus = d.lista.filter(x => x.meu), semDet = d.lista.filter(x => !x.detalhe).length;
+    $('#view').innerHTML = `<div class="box" style="padding:10px 14px">${filtros('nmf', seletorCat(d.categorias, d.cat))}</div>
+      ${semHist(d, 'top 20')}${semDet ? `<div class="note">${num(semDet)} item(ns) ainda sem nome e foto: os detalhes chegam na próxima coleta diária (ou o ML não libera os dados desse anúncio).</div>` : ''}
+      <div class="kgrid">${kpi('Seus no top 20', num(meus.length), meus.length ? `melhor posição: ${Math.min(...meus.map(x => x.pos))}º` : 'nenhum anúncio seu nesta categoria', 'trophy', meus.length ? 'green' : 'slate')}
+        ${kpi('Categorias com você no top', num(d.categorias.filter(c => c.meus).length), `de ${num(d.categorias.length)} categorias monitoradas`, 'catalogo', 'blue')}
+        ${kpi('Preço do top 20', (() => { const p = d.lista.map(x => x.preco).filter(v => v != null).sort((a, b) => a - b); return p.length ? `${brl(p[0])} a ${brl(p.at(-1))}` : '—'; })(), 'preço do ganhador no catálogo', 'custos', 'amber')}</div>
+      <div class="box"><h3>Top 20 de hoje <small>${esc(d.nome || '')} · ${d.dia ? ddmm(d.dia) : ''}</small></h3>
+        <div class="tw" style="max-height:none"><table class="rt"><thead><tr><th class="n">#</th><th>Produto</th><th class="c">Movimento</th><th>Tipo</th><th class="n">Preço</th><th class="c">Você</th></tr></thead><tbody>
+        ${d.lista.map(x => `<tr${x.meu ? ' style="background:#f0fdf4"' : ''}><td class="n"><b>${x.pos}º</b></td><td><div class="pr">${thumb(x.thumb)}<div><b>${x.link ? `<a class="lk" target="_blank" rel="noopener" href="${esc(x.link)}">${esc(x.nome || x.id)}</a>` : esc(x.nome || x.id)}</b><small>${esc(x.id)}</small></div></div></td>
+          <td class="c">${mov(x)}</td><td><span class="sg ${x.tipo === 'Catálogo' ? 'b' : 'n'}">${esc(x.tipo)}</span></td><td class="n">${x.preco == null ? '—' : brl(x.preco)}</td>
+          <td class="c">${x.meu ? `<span class="sg g">seu</span>${x.ganhaBuyBox ? ' <span class="sg g">ganha o buy box</span>' : ''}` : ''}</td></tr>`).join('')}</tbody></table></div></div>
+      <p style="color:var(--mut);font-size:12px">O Mercado Livre informa a posição de cada produto, não quantas unidades ele vendeu.</p>`;
+    $('#ncat').onchange = () => { location.hash = 'nmmaisvendidos:' + encodeURIComponent($('#ncat').value); };
+  };
 
   // ═════════ VISÃO DO DIA ═════════
   VIEWS.nmdia = async function () {

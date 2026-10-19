@@ -18,10 +18,11 @@ const itensMeta = cacheDe(300e3, () => {
   for (const r of db.prepare(`SELECT loja, chave, json_extract(body,'$.title') titulo, json_extract(body,'$.thumbnail') t, json_extract(body,'$.category_id') cat,
       json_extract(body,'$.status') st, json_extract(body,'$.catalog_listing') catalogo, json_extract(body,'$.listing_type_id') tipo, json_extract(body,'$.sold_quantity') vendidos,
       json_extract(body,'$.price') preco, json_extract(body,'$.available_quantity') estoque, json_extract(body,'$.shipping.logistic_type') lg, json_extract(body,'$.permalink') link,
-      json_extract(body,'$.seller_custom_field') sku, json_extract(body,'$.date_created') criado, json_extract(body,'$.health') saude
+      json_extract(body,'$.seller_custom_field') sku, json_extract(body,'$.date_created') criado, json_extract(body,'$.health') saude,
+      json_extract(body,'$.catalog_product_id') prod, json_extract(body,'$.user_product_id') up
       FROM raw WHERE recurso='item' AND status=200`).iterate())
     m[r.loja + ':' + r.chave] = { titulo: r.titulo, thumb: r.t ? r.t.replace('http://', 'https://') : null, cat: r.cat, status: r.st, catalogo: !!r.catalogo, tipo: TIPO[r.tipo] || r.tipo || null,
-      vendidos: r.vendidos ?? null, preco: r.preco, estoque: r.estoque, lg: r.lg ? (LOG[r.lg] || 'Padrão') : null, link: r.link, sku: r.sku, criado: r.criado, saude: r.saude };
+      vendidos: r.vendidos ?? null, preco: r.preco, estoque: r.estoque, lg: r.lg ? (LOG[r.lg] || 'Padrão') : null, link: r.link, sku: r.sku, criado: r.criado, saude: r.saude, prod: r.prod, up: r.up };
   return m;
 });
 
@@ -233,5 +234,64 @@ export function registrar(app, { H, lojasSel, dias }) {
     const mesesK = L.map(x => x.mes), cats = Object.entries(porCat).map(([nome, o]) => ({ nome, total: Object.values(o).reduce((t, v) => t + v, 0), meses: mesesK.map(k => r2(o[k] || 0)) }))
       .sort((a, b) => b.total - a.total).slice(0, 8);
     return { meses: L, categorias: cats, temVisitas: temVisitas(lojas) };
+  }));
+
+  // ═════════ Mercado (Fase 2): Top buscas e Mais vendidos ═════════
+  // O ML informa só a POSIÇÃO (palavras mais buscadas e top 20 de cada categoria), nunca o volume. As fotos diárias guardadas pela coleta
+  // (<recurso>_hist, chave <chave>|<dia>) permitem dizer o que subiu, caiu ou entrou desde o dia anterior.
+  const ultimo = (lojas, rec, chave) => db.prepare(`SELECT body, coletado_em FROM raw WHERE recurso=? AND status=200 AND loja IN (${lojas.map(() => '?').join(',')}) ${chave ? 'AND chave=?' : ''}
+    ORDER BY coletado_em DESC LIMIT 1`).get(rec, ...lojas, ...(chave ? [chave] : []));
+  const fotos = (lojas, rec, chave) => { const m = {};
+    for (const r of db.prepare(`SELECT chave, body FROM raw WHERE recurso=? AND status=200 AND loja IN (${lojas.map(() => '?').join(',')}) AND chave LIKE ?`).iterate(rec + '_hist', ...lojas, `${chave || '%'}|%`)) m[r.chave.slice(-10)] = parse(r.body);
+    return m; };
+  // foto de hoje (a mais recente) e a do último dia ANTES dela
+  const hojeEantes = (lojas, rec, chave) => {
+    const u = ultimo(lojas, rec, chave); if (!u) return null;
+    const dia = diaBR(new Date(u.coletado_em).toISOString()), F = fotos(lojas, rec, chave), dAnt = Object.keys(F).filter(d => d < dia).sort().at(-1);
+    return { atual: parse(u.body), dia, coletado: u.coletado_em, anterior: dAnt ? F[dAnt] : null, diaAnterior: dAnt || null, fotos: F };
+  };
+  const catsCom = (lojas, rec) => [...new Set(db.prepare(`SELECT chave FROM raw WHERE recurso=? AND status=200 AND loja IN (${lojas.map(() => '?').join(',')})`).all(rec, ...lojas).map(r => r.chave))]
+    .map(id => ({ id, ...cat(id) }));
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const VAZIAS = new Set(['para', 'com', 'sem', 'de', 'da', 'do', 'das', 'dos', 'em', 'e', 'a', 'o', 'p', 'c']);
+
+  app.get('/api/nm/buscas', H(q => {
+    const lojas = lojasSel(q), cats = catsCom(lojas, 'trends_category').sort((a, b) => a.nome.localeCompare(b.nome)), id = cats.some(c => c.id === q.cat) ? q.cat : '';
+    const R = hojeEantes(lojas, id ? 'trends_category' : 'trends_mlb', id || null);
+    // seus anúncios ativos: a busca está "coberta" quando algum título tem todas as palavras dela
+    const titulos = Object.entries(itensMeta()).filter(([k, mi]) => mi.status === 'active' && lojas.includes(k.split(':')[0])).map(([, mi]) => ' ' + norm(mi.titulo) + ' ');
+    const cobre = kw => { const t = norm(kw).split(' ').filter(w => w && !VAZIAS.has(w)); return t.length ? titulos.filter(x => t.every(w => x.includes(' ' + w) || x.includes(w + ' '))).length : 0; };
+    const posDe = lista => Object.fromEntries((Array.isArray(lista) ? lista : []).map((x, i) => [norm(x.keyword), i + 1]));
+    const ant = R?.anterior ? posDe(R.anterior) : null;
+    const lista = (Array.isArray(R?.atual) ? R.atual : []).map((x, i) => { const p = ant?.[norm(x.keyword)];
+      return { pos: i + 1, keyword: x.keyword, url: x.url, anterior: p ?? null, delta: p ? p - (i + 1) : null, novo: !!ant && !p, anuncios: cobre(x.keyword) }; });
+    // ranking do período: as buscas que mais apareceram nas fotos dos últimos 30 dias
+    const ini = addDias(hoje(), -29), hist = {}; let nFotos = 0;
+    for (const [d, f] of Object.entries(R?.fotos || {})) { if (d < ini || !Array.isArray(f)) continue; nFotos++;
+      f.forEach((x, i) => { const h = hist[norm(x.keyword)] ||= { keyword: x.keyword, url: x.url, dias: 0, soma: 0, melhor: 99 }; h.dias++; h.soma += i + 1; h.melhor = Math.min(h.melhor, i + 1); }); }
+    const periodo = Object.values(hist).map(h => ({ keyword: h.keyword, url: h.url, dias: h.dias, media: h.soma / h.dias, melhor: h.melhor, anuncios: cobre(h.keyword) }))
+      .sort((a, b) => b.dias - a.dias || a.media - b.media).slice(0, 50);
+    return { categorias: cats, cat: id, nome: id ? cat(id).caminho : 'Todo o Mercado Livre', dia: R?.dia || null, diaAnterior: R?.diaAnterior || null, fotos: nFotos, lista, periodo };
+  }));
+
+  app.get('/api/nm/maisvendidos', H(q => {
+    const lojas = lojasSel(q), meta = Object.entries(itensMeta()).filter(([k]) => lojas.includes(k.split(':')[0])).map(([, mi]) => mi);
+    const meusProd = new Set(meta.map(m => m.prod).filter(Boolean)), meusUp = new Set(meta.map(m => m.up).filter(Boolean));
+    const ph = lojas.map(() => '?').join(','), eu = new Set(db.prepare(`SELECT body FROM raw WHERE recurso='user_me' AND status=200 AND loja IN (${ph})`).all(...lojas).map(r => String(parse(r.body)?.id)));
+    const meuNoTop = x => (x.type === 'PRODUCT' && meusProd.has(x.id)) || (x.type === 'USER_PRODUCT' && meusUp.has(x.id));
+    const cats = catsCom(lojas, 'highlights_category').map(c => { const h = parse(ultimo(lojas, 'highlights_category', c.id)?.body); return { ...c, meus: (h?.content || []).filter(meuNoTop).length }; })
+      .sort((a, b) => b.meus - a.meus || a.nome.localeCompare(b.nome));
+    const id = cats.some(c => c.id === q.cat) ? q.cat : cats[0]?.id;
+    const R = id ? hojeEantes(lojas, 'highlights_category', id) : null;
+    const det = (rec, k) => parse(db.prepare(`SELECT body FROM raw WHERE recurso=? AND chave=? AND status=200 ORDER BY coletado_em DESC LIMIT 1`).get(rec, k)?.body);
+    const ant = Object.fromEntries((R?.anterior?.content || []).map(x => [x.id, x.position]));
+    const lista = (R?.atual?.content || []).map(x => {
+      const d = det(x.type === 'PRODUCT' ? 'product' : 'user_product', x.id) || {}, bb = d.buy_box_winner, p = ant[x.id], nome = d.name || d.title || null;
+      return { pos: x.position, id: x.id, tipo: x.type === 'PRODUCT' ? 'Catálogo' : x.type === 'USER_PRODUCT' ? 'Anúncio' : x.type, nome, thumb: (d.pictures?.[0]?.url || d.thumbnail || '').replace('http://', 'https://') || null,
+        preco: bb?.price ?? d.price ?? null, meu: meuNoTop(x), ganhaBuyBox: !!bb && eu.has(String(bb.seller_id)), detalhe: !!nome,
+        link: d.permalink || (x.type === 'PRODUCT' ? `https://www.mercadolivre.com.br/p/${x.id}` : nome ? `https://lista.mercadolivre.com.br/${encodeURIComponent(nome)}` : null),
+        anterior: p ?? null, delta: p ? p - x.position : null, novo: !!R?.anterior && !p };
+    });
+    return { categorias: cats, cat: id || null, nome: id ? cat(id).caminho : null, dia: R?.dia || null, diaAnterior: R?.diaAnterior || null, lista };
   }));
 }
