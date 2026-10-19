@@ -406,7 +406,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') fecha(); });
 // Site web: os dados ficam no navegador (limpar os dados do site apaga tudo). O backup em arquivo guarda os custos e a configuração (o resto é recoletado do ML).
 function backupWeb() {
   const box = document.createElement('div'); box.className = 'box'; box.style.cssText = 'max-width:760px;margin-top:14px';
-  box.innerHTML = `<h3>Backup dos custos</h3><p style="color:var(--mut)">Seus custos e alíquotas existem <b>só neste navegador</b>. Se você limpar os dados do site ou trocar de computador, eles somem — o resto (pedidos etc.) volta sozinho do Mercado Livre. Baixe uma cópia de vez em quando.</p>
+  box.innerHTML = `<h3>Backup dos custos</h3><p style="color:var(--mut)">Seus custos dos produtos, custos fixos e alíquotas existem <b>só neste navegador</b>. Se você limpar os dados do site ou trocar de computador, eles somem — o resto (pedidos etc.) volta sozinho do Mercado Livre. Baixe uma cópia de vez em quando.</p>
     <button id="bkx" style="background:var(--ac);border:0;border-radius:6px;padding:8px 16px;font-weight:600;cursor:pointer">Baixar backup</button>
     <label style="margin-left:10px;cursor:pointer;text-decoration:underline">Restaurar de um arquivo… <input id="bki" type="file" accept=".json,application/json" style="display:none"></label> <span id="bkm"></span>`;
   $('#view').appendChild(box);
