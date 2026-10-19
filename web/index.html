@@ -300,10 +300,15 @@ const acosPill = (custo, venda) => venda ? pill(pct(custo / venda), custo / vend
 const estPill = n => n ? (n <= 10 ? pill(num(n), 'warn') : num(n)) : pill('0', 'bad');
 const corL = n => n < 0 ? 'bad' : '';
 // grava custo unitário de um SKU (campo editável)
+// CUSTOS_TELA = lista de SKUs que a tela aberta guarda na memória (Custos / Lucro real): depois de salvar, o valor novo vai também para ela,
+// senão filtrar ou buscar de novo redesenha a lista antiga e o campo volta vazio (parecia que não tinha salvo).
+let CUSTOS_TELA = null;
 async function salvaCusto(inp) {
-  const v = inp.value.replace(',', '.'); inp.style.outline = '1px solid var(--warn)';
+  let v = inp.value.trim(); if (v.includes(',')) v = v.replace(/\./g, '').replace(',', '.'); // 1.234,56 → 1234.56
+  inp.style.outline = '1px solid var(--warn)';
   const r = await fetch('api/custos', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sku: inp.dataset.sku, custo: v === '' ? null : v }) }).catch(() => null);
   inp.style.outline = r && r.ok ? '1px solid var(--ok)' : '2px solid var(--bad)'; inp.title = r && r.ok ? 'salvo' : 'não foi possível salvar (use só números)';
+  if (r && r.ok && CUSTOS_TELA) { const c = v === '' ? null : +v; for (const s of CUSTOS_TELA) if (s.sku === inp.dataset.sku) { s.custo = c; s.custoUnit = c; if ('semCusto' in s) s.semCusto = c == null; } window.aoSalvarCusto?.(); }
 }
 const campoCusto = (sku, custo) => `<input data-sku="${esc(sku)}" value="${custo ?? ''}" placeholder="R$ 0,00" inputmode="decimal" style="width:90px;text-align:right" onchange="salvaCusto(this)">`;
 // ── Detalhe dos cards da tela "Lucro real": o que é no ML, como é calculado, de onde vem e a quebra por mês / SKU ──
@@ -425,7 +430,7 @@ function backupWeb() {
 }
 const VIEWS2 = {
   async lucro() {
-    const d = await api('lucro'), t = d.total, cb = d.cobertura;
+    const d = await api('lucro'), t = d.total, cb = d.cobertura; CUSTOS_TELA = d.skus; window.aoSalvarCusto = null;
     const avisos = [];
     const lojasCfg = Object.keys(d.aliquotaAuto); const autoOk = d.config.aliquota_modo === 'auto' && lojasCfg.every(l => d.aliquotaAuto[l]);
     if (!autoOk && lojasCfg.every(l => !d.config['aliquota_' + l])) avisos.push('Alíquota do Simples Nacional não definida — o imposto está zerado. <a class="lk" href="#config">Definir</a>');
@@ -473,8 +478,7 @@ const VIEWS2 = {
   async custos() {
     // padrão 12 meses: o DRE usa os custos dos SKUs vendidos no ano todo (antes a tela só listava os vendidos em 90 dias)
     const per = window.CUSTOS_DIAS || 365;
-    const r = await getJ(`api/custos?loja=${$('#loja').value}&dias=${per}`);
-    const recTot = r.reduce((t, s) => t + s.receita, 0), recCom = r.filter(s => s.custo != null).reduce((t, s) => t + s.receita, 0);
+    const r = await getJ(`api/custos?loja=${$('#loja').value}&dias=${per}`); CUSTOS_TELA = r;
     $('#view').innerHTML = `<div class="box"><h3>Custo unitário por SKU — salva ao sair do campo</h3>
       <div class="bar"><input id="fs" placeholder="Filtrar" style="flex:1"><select id="cp"><option value="90">vendidos em 90 dias</option><option value="365">vendidos em 12 meses</option></select><label><input type="checkbox" id="fc"> só sem custo</label><span id="cn" style="color:var(--mut)"></span></div>
       <details style="margin-bottom:10px"><summary class="lk" style="cursor:pointer">Colar vários custos de uma vez (planilha)</summary>
@@ -495,8 +499,11 @@ const VIEWS2 = {
       if (res && res.ok) setTimeout(go, 1200);
     };
     const draw = () => { const f = $('#fs').value.toLowerCase(), sc = $('#fc').checked; const rows = r.filter(s => (!f || (s.sku + s.titulo).toLowerCase().includes(f)) && (!sc || s.custo == null));
-      $('#cn').textContent = `${r.filter(s => s.custo != null).length}/${r.length} SKUs com custo · ${pct(recTot ? recCom / recTot : 0)} da receita coberta`;
+      window.aoSalvarCusto?.(); // contador de SKUs com custo (conta com os valores atuais)
       $('#ls').innerHTML = tbl([{ t: 'SKU', f: s => esc(s.sku) + (s.anuncios > 1 ? `<br><small style="color:var(--ac)">vale para ${s.anuncios} anúncios</small>` : '') }, { t: 'Anúncio', k: 'titulo' }, { t: 'Loja', f: s => s.lojas.map(l => ln({ loja: l })).join(' ') }, { t: 'Unidades', n: 1, f: s => num(s.unidades) }, { t: 'Receita', n: 1, f: s => brl(s.receita) }, { t: 'Preço', n: 1, f: s => brl(s.preco) }, { t: 'Custo unitário', n: 1, f: s => campoCusto(s.sku, s.custo) }], rows.slice(0, 600), 'tk'); sortable('#tk'); };
+    // custo salvo num campo: atualiza só o contador (redesenhar a tabela tiraria o foco de quem está digitando)
+    window.aoSalvarCusto = () => { const rt = r.reduce((t, s) => t + s.receita, 0), rc = r.filter(s => s.custo != null).reduce((t, s) => t + s.receita, 0);
+      if ($('#cn')) $('#cn').textContent = `${r.filter(s => s.custo != null).length}/${r.length} SKUs com custo · ${pct(rt ? rc / rt : 0)} da receita coberta`; };
     ['#fs', '#fc'].forEach(i => $(i).oninput = draw); draw();
   },
   async config() {
