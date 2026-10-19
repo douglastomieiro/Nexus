@@ -10,6 +10,7 @@ import { saveRaw, getRaw } from './db.js';
 import { agendar } from './sync.js';
 import { promocoesComMargem, gerarAlertas } from './analises.js';
 import { registrar as registrarPainel } from './painel.js';
+import { registrar as registrarMetrics } from './metrics.js';
 import { registrarDescontos } from './descontos/rotas.js';
 import { registrarShopee, alertasShopee } from './shopee-rotas.js';
 import { registrarContas } from './contas-rotas.js';
@@ -158,6 +159,7 @@ app.get('/api/raw/doc', H(q => {
 app.use(express.json());
 const lojasSel = q => (nomes[q.loja] ? [q.loja] : Object.keys(nomes));
 registrarPainel(app, { H, nomes, lojasSel, dias });
+registrarMetrics(app, { H, lojasSel, dias }); // Nexus Metrics › Meu negócio
 app.get('/api/lucro', H(q => { const { porItem, ...r } = calcular({ lojas: lojasSel(q), desde: desde(q) }); return { ...r, devolucoes: r.devolucoes.slice(0, 2000) }; }));
 app.get('/api/devolucoes', H(q => {
   const r = calcular({ lojas: lojasSel(q), desde: desde(q) });

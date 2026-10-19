@@ -4,24 +4,24 @@
 import { db } from './db.js';
 import { calcular } from './margem.js';
 
-const LOG = { fulfillment: 'Full', self_service: 'Flex', xd_drop_off: 'Padrão', cross_docking: 'Padrão', drop_off: 'Padrão', default: 'Padrão' };
-const hoje = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
-const addDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
-const diaBR = s => new Date(Date.parse(s) - 3 * 3600e3).toISOString().slice(0, 10); // dia comercial (fuso de Brasília); o ML devolve -04:00
-const r2 = n => Math.round((n || 0) * 100) / 100;
+export const LOG = { fulfillment: 'Full', self_service: 'Flex', xd_drop_off: 'Padrão', cross_docking: 'Padrão', drop_off: 'Padrão', default: 'Padrão' };
+export const hoje = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+export const addDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+export const diaBR = s => new Date(Date.parse(s) - 3 * 3600e3).toISOString().slice(0, 10); // dia comercial (fuso de Brasília); o ML devolve -04:00
+export const r2 = n => Math.round((n || 0) * 100) / 100;
 const semQtd = t => String(t || '').replace(/ x\d+$/, '');
-const janela = (dias) => { const fim = hoje(), ini = addDias(fim, -(dias - 1)); return { n: dias, ini, fim, pIni: addDias(ini, -dias), pFim: addDias(ini, -1) }; };
+export const janela = (dias) => { const fim = hoje(), ini = addDias(fim, -(dias - 1)); return { n: dias, ini, fim, pIni: addDias(ini, -dias), pFim: addDias(ini, -1) }; };
 
 // ── caches de metadados (logística/UF por pedido, anúncios, categorias) ──
-const cacheDe = (ttl, fn) => { let c = { t: 0, v: null }; return () => { if (c.v && Date.now() - c.t < ttl) return c.v; c = { t: Date.now(), v: fn() }; return c.v; }; };
-const envios = cacheDe(60e3, () => {
+export const cacheDe = (ttl, fn) => { let c = { t: 0, v: null }; return () => { if (c.v && Date.now() - c.t < ttl) return c.v; c = { t: Date.now(), v: fn() }; return c.v; }; };
+export const envios = cacheDe(60e3, () => {
   const m = {};
   for (const r of db.prepare(`SELECT loja, json_extract(body,'$.order_id') oid, json_extract(body,'$.logistic_type') lg, json_extract(body,'$.receiver_address.state.id') uf
     FROM raw WHERE recurso='shipment' AND status=200`).iterate()) if (r.oid) m[r.loja + ':' + r.oid] = { lg: r.lg ? (LOG[r.lg] || 'Padrão') : null, uf: (r.uf || '').replace('BR-', '') || null };
   return m;
 });
 // anúncio → miniatura, categoria, status, preço, estoque, logística (dos anúncios coletados; miniatura também dos anúncios em Ads)
-const anuncios = cacheDe(300e3, () => {
+export const anuncios = cacheDe(300e3, () => {
   const m = {};
   for (const r of db.prepare(`SELECT loja, chave, json_extract(body,'$.thumbnail') t, json_extract(body,'$.category_id') cat, json_extract(body,'$.status') st, json_extract(body,'$.price') preco,
       json_extract(body,'$.available_quantity') est, json_extract(body,'$.shipping.logistic_type') lg, json_extract(body,'$.permalink') link FROM raw WHERE recurso='item' AND status=200`).iterate())
@@ -32,7 +32,7 @@ const anuncios = cacheDe(300e3, () => {
   return m;
 });
 const thumbDe = (loja, item) => anuncios()[loja + ':' + item]?.thumb || null;
-const categorias = cacheDe(600e3, () => Object.fromEntries(db.prepare(`SELECT chave, json_extract(body,'$.name') n FROM raw WHERE recurso='category' AND status=200`).all().map(r => [r.chave, r.n])));
+export const categorias = cacheDe(600e3, () => Object.fromEntries(db.prepare(`SELECT chave, json_extract(body,'$.name') n FROM raw WHERE recurso='category' AND status=200`).all().map(r => [r.chave, r.n])));
 // anúncios em Ads (status e métricas dos últimos 90 dias), por loja:item
 const adsPorItem = cacheDe(120e3, () => {
   const camp = Object.fromEntries(db.prepare(`SELECT loja, chave, json_extract(body,'$.name') n FROM raw WHERE recurso='ads_campaign' AND status=200`).all().map(r => [r.loja + ':' + r.chave, r.n]));
