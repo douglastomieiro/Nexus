@@ -5,6 +5,25 @@ const linkItem = (id, txt) => `<a class="lk" target="_blank" rel="noopener" href
 const linkPedido = (id) => `<a class="lk" target="_blank" rel="noopener" href="${mlUrl('order', id)}">${esc(id)}</a>`;
 const mesNome = m => { const [y, mm] = m.split('-'); return ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][+mm - 1] + '/' + y.slice(2); };
 
+// Período do DRE (hash dre:<arg>):
+//   'Nm' = últimos N meses (1 a 60) · 'AAAA-MM' = um mês, com o anterior ao lado para comparar
+//   'AAAA-MM~AAAA-MM' = intervalo de meses · 'AAAA-MM,AAAA-MM,...' = meses escolhidos, lado a lado
+// Volta { sel, tipo: 'ultimos' | 'mes' | 'intervalo' | 'escolhidos', meses (os que entram nos totais), tabela (colunas, se diferente), de, ate (o que buscar no servidor) }
+const somaMes = (m, n) => { const d = new Date(m + '-01T00:00:00Z'); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 7); };
+const mesesDe = (a, b) => { const l = []; for (let m = a; m <= b && l.length < 60; m = somaMes(m, 1)) l.push(m); return l; };
+function drePeriodo(arg) {
+  const atual = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 7), ehMes = s => /^\d{4}-(0[1-9]|1[0-2])$/.test(s || '') && s <= atual;
+  const s = String(arg || ''), fim = P => ({ ...P, de: (P.tabela || P.meses)[0], ate: P.meses.at(-1) });
+  const n = /^\d+m$/.test(s) ? parseInt(s) : 0;
+  if (n >= 1 && n <= 60) return fim({ sel: s, tipo: 'ultimos', meses: mesesDe(somaMes(atual, 1 - n), atual) });
+  if (ehMes(s)) return fim({ sel: s, tipo: 'mes', meses: [s], tabela: [somaMes(s, -1), s] });
+  const [a, b] = s.split('~');
+  if (ehMes(a) && ehMes(b)) { const [x, y] = a <= b ? [a, b] : [b, a]; if (x === y) return drePeriodo(x); const meses = mesesDe(x, y); return fim({ sel: `${x}~${meses.at(-1)}`, tipo: 'intervalo', meses }); }
+  const lista = [...new Set(s.split(','))].filter(ehMes).sort();
+  if (lista.length === 1) return drePeriodo(lista[0]);
+  if (lista.length > 1) { const ok = lista.filter(m => m >= somaMes(lista.at(-1), -59)); return fim({ sel: ok.join(','), tipo: 'escolhidos', meses: ok }); }
+  return drePeriodo('12m');
+}
 
 // DRE com meses em colunas: seções escuras, subtotais em destaque e coluna de total (estilo Jodda). Linhas = {mes, receita, comissao, frete, imposto, custo, adsTotal, perdaDevolucao, outras, final, ...}
 // cats = categorias de custo fixo (com elas, o DRE ganha a seção CUSTOS FIXOS e o lucro líquido; x.fixos = { categoria: valor }, x.liquido)
@@ -119,9 +138,10 @@ Object.assign(VIEWS, {
   },
 
   // ───────── FINANCEIRO (DRE) ─────────
-  // arg (hash dre:<arg>): '12m' | '6m' | '3m' (últimos N meses) ou 'AAAA-MM' (um mês, com o anterior ao lado para comparar)
+  // arg (hash dre:<arg>): últimos N meses, um mês, intervalo ou meses escolhidos (ver drePeriodo)
   async dre(arg) {
-    const d = await api('dre', '&meses=12');
+    const P = drePeriodo(arg), sel = P.sel, umMes = P.tipo === 'mes';
+    const d = await api('dre', `&de=${P.de}&ate=${P.ate}`);
     const hojeBR = new Date(Date.now() - 3 * 3600e3 - 89 * 864e5).toISOString().slice(0, 7);
     const g = {}, mesVazio = mes => ({ mes, pedidos: 0, receita: 0, devolvido: 0, comissao: 0, frete: 0, imposto: 0, custo: 0, ads: 0, adsSemVenda: 0, lucro: 0, perdaDevolucao: 0, freteNF: 0 });
     d.porMes.forEach(x => { const o = g[x.mes] ||= mesVazio(x.mes);
@@ -154,10 +174,10 @@ Object.assign(VIEWS, {
         impostoTotal: m.imposto + (sp?.imposto || 0), margem: receitaTotal ? final / receitaTotal : 0, fixos, fixosTotal, liquido: final - fixosTotal };
     });
     // período escolhido: os cartões somam só ele; com um mês só, a tabela mostra também o mês anterior para comparar
-    const sel = todas.some(x => x.mes === arg) ? arg : ['12m', '6m', '3m'].includes(arg) ? arg : '12m', umMes = !sel.endsWith('m');
-    const linhas = umMes ? todas.filter(x => x.mes === sel) : todas.slice(-parseInt(sel));
-    const tabela = umMes ? todas.filter(x => x.mes <= sel).slice(-2) : linhas;
-    const nMeses = linhas.length || parseInt(sel), rot = umMes ? mesNome(sel) : nMeses === 1 ? '1 mês' : `${nMeses} meses`;
+    const linhas = todas.filter(x => P.meses.includes(x.mes));
+    const tabela = P.tabela ? todas.filter(x => P.tabela.includes(x.mes)) : linhas;
+    const nMeses = P.tipo === 'ultimos' ? linhas.length || P.meses.length : P.meses.length;
+    const rot = umMes ? mesNome(sel) : P.tipo === 'intervalo' ? `${mesNome(P.meses[0])} a ${mesNome(P.meses.at(-1))}` : P.tipo === 'escolhidos' ? `${nMeses} meses escolhidos` : nMeses === 1 ? '1 mês' : `${nMeses} meses`;
     const tot = k => linhas.reduce((t, x) => t + x[k], 0), fats = d.faturas.filter(f => linhas.some(x => x.mes === f.mes));
     // categorias de custo fixo que aparecem nos meses do DRE, da maior para a menor
     const catTot = {}; tabela.forEach(x => Object.entries(x.fixos).forEach(([c, v]) => { catTot[c] = (catTot[c] || 0) + v; }));
@@ -166,10 +186,20 @@ Object.assign(VIEWS, {
     if (d.cobertura.pctReceitaSemCusto > 0.01) aviso.push(`${pct(d.cobertura.pctReceitaSemCusto)} da receita sem custo de produto cadastrado — lucro superestimado.`);
     if (d.shopee?.cobertura?.pctReceitaSemCusto > 0.01) aviso.push(`Shopee: ${pct(d.shopee.cobertura.pctReceitaSemCusto)} da receita sem custo de produto cadastrado — lucro superestimado.`);
     if (d.cobertura.pctReceitaFreteEstimado > 0.01) aviso.push(`${pct(d.cobertura.pctReceitaFreteEstimado)} da receita com frete estimado (coleta histórica ainda em andamento ou frete indisponível).`);
-    const opcoes = [['12m', 'Últimos 12 meses'], ['6m', 'Últimos 6 meses'], ['3m', 'Últimos 3 meses'], ...todas.slice().reverse().map(x => [x.mes, `Só ${mesNome(x.mes)}${x.mes === todas.at(-1).mes ? ' (mês atual, parcial)' : ''}`])];
+    // opções do período: atalhos, anos e meses desde o pedido mais antigo (até 60 meses), mais intervalo e meses escolhidos à mão
+    const atual = drePeriodo('1m').meses[0], SEL = 'padding:7px 9px;border:1px solid var(--bd);border-radius:7px;font:inherit';
+    const primeiro = [d.primeiroMes, todas[0]?.mes, somaMes(atual, -11)].filter(Boolean).sort()[0];
+    const disp = mesesDe(primeiro < somaMes(atual, -59) ? somaMes(atual, -59) : primeiro, atual), anos = [...new Set(disp.map(m => m.slice(0, 4)))].reverse();
+    const grupos = [['Atalhos', [['3m', 'Últimos 3 meses'], ['6m', 'Últimos 6 meses'], ['12m', 'Últimos 12 meses'], ...(disp.length > 12 ? [['24m', 'Últimos 24 meses']] : [])]],
+      ['Ano', anos.map(a => [a, disp.filter(m => m.startsWith(a))]).filter(([, ms]) => ms.length > 1)
+        .map(([a, ms]) => [`${ms[0]}~${ms.at(-1)}`, `Ano ${a}${a === atual.slice(0, 4) ? ' (até agora)' : ms.length < 12 ? ` (desde ${mesNome(ms[0])})` : ''}`])],
+      ['Personalizado', [['intervalo', 'De um mês até outro…'], ['escolher', 'Escolher meses…']]],
+      ['Um mês só', disp.slice().reverse().map(m => [m, `Só ${mesNome(m)}${m === atual ? ' (mês atual, parcial)' : ''}`])]];
+    const valOpc = grupos.some(([, os]) => os.some(([v]) => v === sel)) ? sel : P.tipo === 'escolhidos' ? 'escolher' : 'intervalo';
     $('#view').innerHTML = `<div class="box" style="padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px;font-weight:600">Período do DRE
-        <select id="drep" style="padding:7px 9px;border:1px solid var(--bd);border-radius:7px;font:inherit">${opcoes.map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
-        ${umMes ? `<small style="color:var(--mut)">a tabela mostra ${tabela.length > 1 ? `${mesNome(tabela[0].mes)} ao lado para comparar` : 'só este mês'}</small>` : ''}</div>`
+        <select id="drep" style="${SEL}">${grupos.map(([n, os]) => `<optgroup label="${n}">${os.map(([v, t]) => `<option value="${v}" ${v === valOpc ? 'selected' : ''}>${esc(t)}</option>`).join('')}</optgroup>`).join('')}</select></label>
+        ${umMes ? `<small style="color:var(--mut)">a tabela mostra ${tabela.length > 1 ? `${mesNome(tabela[0].mes)} ao lado para comparar` : 'só este mês'}</small>` : ''}
+        <div id="drex" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;flex-basis:100%"></div></div>`
       + aviso.map(a => `<div class="box" style="border-color:var(--warn);margin-bottom:10px">⚠ ${a}</div>`).join('') + `<div class="cards">
       ${card2(`Receita${comSp ? ' ML + Shopee' : ''} (${rot})`, brl(tot('receitaTotal')))}${comFixos
         ? card2(comSp ? 'Lucro das vendas (ML + Shopee)' : 'Lucro antes dos custos fixos', brl(tot('final')), tot('final') < 0 ? 'bad' : 'ok') + card2(`Custos fixos (${rot})`, '−' + brl(tot('fixosTotal')), 'warn')
@@ -178,7 +208,7 @@ Object.assign(VIEWS, {
       ${card2(`Imposto (${rot})`, '−' + brl(tot('impostoTotal')))}${card2('Outras cobranças da fatura', '−' + brl(tot('outras')), 'warn')}
       ${card2(`Perda real com devoluções${comSp ? ' (ML)' : ''}`, tot('perdaDevolucao') >= 0 ? '−' + brl(tot('perdaDevolucao')) : '+' + brl(-tot('perdaDevolucao')), tot('perdaDevolucao') > 0 ? 'bad' : 'ok')}${card2(`Estornado em pedidos cancelados${comSp ? ' (ML)' : ''} <span title="Valor que voltou ao comprador nos pedidos cancelados com reembolso (a maioria cancelada antes do envio). Esses pedidos já estão fora da receita: não é prejuízo. O que você perdeu de fato está em “Perda real com devoluções”." style="cursor:help">ⓘ</span>`, brl(tot('devolvido')))}</div>
       ${umMes ? '' : `<div class="box" style="margin-bottom:14px"><h3>${comFixos ? 'Lucro líquido' : 'Lucro final'} e margem por mês</h3><div style="height:260px"><canvas id="c1"></canvas></div></div>`}
-      <div class="box" style="margin-bottom:14px"><h3>${umMes ? `DRE de ${mesNome(sel)}` : 'DRE mensal'} <small>(mês = data do pedido, fuso de Brasília)</small></h3>${dreTabela(tabela, cats, { total: !umMes })}
+      <div class="box" style="margin-bottom:14px"><h3>${umMes ? `DRE de ${mesNome(sel)}` : `DRE mensal · ${rot}`} <small>(mês = data do pedido, fuso de Brasília)</small></h3>${dreTabela(tabela, cats, { total: !umMes })}
         <p style="color:var(--mut);margin:8px 0 0;font-size:12px">Receita já desconta devoluções (pedidos reembolsados saem da receita). Por isso o “estornado em pedidos cancelados” não é descontado de novo: o que entra no resultado é a perda real (frete, tarifa de devolução e comissão não estornados). “Outras (fatura)” = serviços do Full (armazenagem, coleta, inconformidade), eShop, DIFAL e cobranças não identificadas, líquidas das bonificações. <b>Não</b> entram aqui: a taxa de parcelamento (CFONPN — acréscimo pago pelo comprador e repassado ao Mercado Pago, soma zero para você) e as tarifas de devolução (já contadas pedido a pedido em “Perda devol.”). Ads: API de Ads nos meses inteiros dentro dos últimos 90 dias; antes disso, o valor da fatura. Atenção: a fatura do ML é por <b>período de cobrança</b> (≈ dia 16 do mês anterior ao dia 15), não por mês-calendário — “Outras” e o Ads da fatura são aproximações do mês. O mês corrente usa a fatura ainda em aberto (parcial).${comSp ? ' Shopee: valores do extrato (escrow) de cada pedido pela data do pedido; Ads = gasto total do mês na Shopee (inclui dias sem venda); ajustes = cupons do vendedor, compensações e retenções.' : ''}${comFixos ? ' Custos fixos: valor do mês inteiro, inclusive no mês corrente (que ainda está com as vendas pela metade).' : ''}</p></div>
       <div class="box" style="margin-bottom:14px" id="cfbox"></div>
       <div class="box"><h3>Faturas do Mercado Livre (cobranças por tipo, já líquidas das bonificações)</h3>${fats.length ? fats.slice().reverse().map(f => `<details style="margin-bottom:6px"><summary style="cursor:pointer">${ln(f)} ${esc(f.grupo === 'MP' ? 'Mercado Pago' : 'Mercado Livre')} · fatura ${esc(f.key)} · <b>${brl(f.total)}</b>
@@ -189,7 +219,25 @@ Object.assign(VIEWS, {
       options: { ...ch, scales: { ...ch.scales, y2: { position: 'right', ticks: { color: '#d97706', callback: v => v + '%' }, grid: { display: false } } } } });
     // sem await (o DRE já está na tela); STALE = o usuário trocou de tela antes de a caixa carregar
     custosFixos($('#cfbox'), () => VIEWS.dre(sel)).catch(e => { if (e !== STALE && $('#cfbox')) $('#cfbox').innerHTML = `<p class="bad" style="margin:0">Não foi possível carregar os custos fixos: ${esc(e.message)}</p>`; });
-    $('#drep').onchange = () => { location.hash = 'dre:' + $('#drep').value; };
+    // "De um mês até outro" e "Escolher meses" abrem uma linha com os campos; o resto já troca o período
+    const vai = v => { location.hash = 'dre:' + v; };
+    const painel = modo => {
+      const box = $('#drex');
+      if (modo === 'intervalo') {
+        const op = (id, v) => `<select id="${id}" style="${SEL}">${disp.map(m => `<option value="${m}" ${m === v ? 'selected' : ''}>${mesNome(m)}</option>`).join('')}</select>`;
+        box.innerHTML = `<b>De</b> ${op('drede', disp.includes(P.meses[0]) ? P.meses[0] : disp[0])} <b>até</b> ${op('dreate', disp.includes(P.meses.at(-1)) ? P.meses.at(-1) : atual)} <button id="drea">Ver período</button>`;
+        $('#drea').onclick = () => vai(`${$('#drede').value}~${$('#dreate').value}`);
+      } else if (modo === 'escolher') {
+        const marc = new Set(P.tipo === 'escolhidos' || umMes ? P.meses : []);
+        box.innerHTML = anos.map(a => `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-basis:100%"><b style="min-width:40px">${a}</b>${disp.filter(m => m.startsWith(a)).map(m =>
+          `<label class="tag" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px"><input type="checkbox" value="${m}" ${marc.has(m) ? 'checked' : ''}>${mesNome(m).slice(0, 3)}</label>`).join('')}</div>`).join('')
+          + `<button id="drea">Ver meses marcados</button><small id="dream" style="color:var(--mut)">marque um ou mais meses: eles aparecem lado a lado, com o total só deles</small>`;
+        $('#drea').onclick = () => { const ms = [...box.querySelectorAll('input:checked')].map(i => i.value); if (ms.length) vai(ms.join(',')); else $('#dream').innerHTML = '<b class="bad">marque pelo menos um mês</b>'; };
+      } else box.innerHTML = '';
+      box.style.display = box.innerHTML ? 'flex' : 'none';
+    };
+    painel(valOpc);
+    $('#drep').onchange = () => { const v = $('#drep').value; if (v === 'intervalo' || v === 'escolher') painel(v); else vai(v); };
   },
 
   // ───────── DEVOLUÇÕES ─────────

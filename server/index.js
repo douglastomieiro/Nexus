@@ -185,15 +185,26 @@ app.get('/api/custos', H(q => { // SKUs do ML + SKUs que só vendem na Shopee (o
   return ml.sort((a, b) => b.receita - a.receita);
 }));
 app.post('/api/custos', H((_, req) => { for (const { sku, custo } of [].concat(req.body)) if (sku) setCusto(String(sku), custo); return { ok: true }; }));
+// mês (AAAA-MM) do pedido mais antigo das contas: o DRE oferece os meses a partir dele (guardado por 10 min)
+const primeiroMesCache = new Map();
+function primeiroMes(lojas) {
+  const k = lojas.join(','), c = primeiroMesCache.get(k); if (c && Date.now() - c.t < 600e3) return c.v;
+  const v = db.prepare(`SELECT substr(min(date(json_extract(body,'$.date_created'),'-3 hours')),1,7) m FROM raw WHERE recurso='order' AND status=200 AND loja IN (${lojas.map(() => '?').join(',')})`).get(...lojas)?.m || null;
+  primeiroMesCache.set(k, { t: Date.now(), v }); return v;
+}
+// período: de/ate (AAAA-MM, até 60 meses) ou os últimos `meses` (padrão 12)
 app.get('/api/dre', H(q => {
-  const meses = Math.min(Math.max(parseInt(q.meses) || 12, 1), 13);
-  const ini = new Date(Date.now() - 3 * 3600e3); ini.setUTCDate(1); ini.setUTCMonth(ini.getUTCMonth() - (meses - 1));
-  const r = calcular({ lojas: lojasSel(q), desde: ini.toISOString().slice(0, 10) });
-  const faturas = faturasML(lojasSel(q)).filter(f => f.grupo === 'ML' || f.grupo === 'MP');
+  const mesBR = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 7), ehMes = s => /^\d{4}-(0[1-9]|1[0-2])$/.test(s || '');
+  const soma = (m, n) => { const d = new Date(m + '-01T00:00:00Z'); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 7); };
+  let ate = ehMes(q.ate) && q.ate < mesBR ? q.ate : mesBR, de = ehMes(q.de) ? q.de : soma(mesBR, -(Math.min(Math.max(parseInt(q.meses) || 12, 1), 60) - 1));
+  if (de > ate) [de, ate] = [ate, de];
+  if (soma(de, 59) < ate) de = soma(ate, -59);
+  const lista = []; for (let m = de; m <= ate; m = soma(m, 1)) lista.push(m);
+  const r = calcular({ lojas: lojasSel(q), desde: de + '-01', ate: ate + '-31' });
+  const faturas = faturasML(lojasSel(q)).filter(f => (f.grupo === 'ML' || f.grupo === 'MP') && f.mes >= de && f.mes <= ate);
   // custos fixos de cada mês da janela (os de "todas as contas" só entram quando o filtro é todas as contas)
-  const lista = Array.from({ length: meses }, (_, i) => { const d = new Date(ini); d.setUTCMonth(d.getUTCMonth() + i); return d.toISOString().slice(0, 7); });
   const fixos = fixosPorMes(lista, lojasSel(q), !nomes[q.loja]);
-  return { desde: r.desde, config: r.config, porMes: r.porMes, faturas, cobertura: r.cobertura, fixos };
+  return { desde: r.desde, de, ate, primeiroMes: primeiroMes(lojasSel(q)), config: r.config, porMes: r.porMes, faturas, cobertura: r.cobertura, fixos };
 }));
 registrarFixos(app, { H, nomes }); // Financeiro (DRE) › custos fixos do negócio
 app.get('/api/config', H(() => ({ ...getConfig(), auto: Object.fromEntries(Object.keys(nomes).map(l => { const a = aliquotaAuto(l); return [l, a && { cnpj: a.cnpj, nome: a.nome, anexo: a.anexo, meses: Object.entries(a.meses).slice(-6).map(([mes, v]) => ({ mes, ...v })) }]; })) })));
