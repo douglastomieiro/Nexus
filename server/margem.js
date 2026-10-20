@@ -330,11 +330,12 @@ export function listarSkus(lojas, desde) {
     const o = JSON.parse(r.body); if (o.status === 'cancelled') continue;
     for (const i of o.order_items || []) {
       const sku = skuDe(r.loja, i.item);
-      const s = m[sku] ||= { sku, titulo: i.item.title, item: i.item.id, itens: new Set(), lojas: new Set(), unidades: 0, receita: 0, preco: i.unit_price };
+      const s = m[sku] ||= { sku, titulo: i.item.title, item: i.item.id, itens: new Set(), lojas: new Set(), vars: new Set(), unidades: 0, receita: 0, preco: i.unit_price };
+      const va = (i.item.variation_attributes || []).map(a => `${a.name}: ${a.value_name}`).join(', '); if (va) s.vars.add(va); // ex.: "Cor: Preto, Tamanho: M"
       s.lojas.add(r.loja); s.itens.add(i.item.id); s.unidades += i.quantity; s.receita += i.unit_price * i.quantity;
     }
   }
-  return Object.values(m).map(s => ({ ...s, lojas: [...s.lojas], anuncios: s.itens.size, custo: custos[s.sku] ?? custos[s.item] ?? null })).sort((a, b) => b.receita - a.receita);
+  return Object.values(m).map(s => ({ ...s, lojas: [...s.lojas], vars: undefined, variacao: [...s.vars].slice(0, 3).join(' · ') + (s.vars.size > 3 ? ' …' : ''), anuncios: s.itens.size, custo: custos[s.sku] ?? custos[s.item] ?? null })).sort((a, b) => b.receita - a.receita);
 }
 
 // ── Fatura do ML (billing): classifica cada cobrança/bonificação ──

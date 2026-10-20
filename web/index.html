@@ -498,9 +498,9 @@ const VIEWS2 = {
       $('#lok').textContent = res && res.ok ? `${lote.length} custo(s) salvos${ruins.length ? ` · ${ruins.length} linha(s) ignorada(s): ${ruins.slice(0, 3).join(' | ')}` : ''}` : 'Falha ao salvar';
       if (res && res.ok) setTimeout(go, 1200);
     };
-    const draw = () => { const f = $('#fs').value.toLowerCase(), sc = $('#fc').checked; const rows = r.filter(s => (!f || (s.sku + s.titulo).toLowerCase().includes(f)) && (!sc || s.custo == null));
+    const draw = () => { const f = $('#fs').value.toLowerCase(), sc = $('#fc').checked; const rows = r.filter(s => (!f || (s.sku + s.titulo + (s.variacao || '')).toLowerCase().includes(f)) && (!sc || s.custo == null));
       window.aoSalvarCusto?.(); // contador de SKUs com custo (conta com os valores atuais)
-      $('#ls').innerHTML = tbl([{ t: 'SKU', f: s => esc(s.sku) + (s.anuncios > 1 ? `<br><small style="color:var(--ac)">vale para ${s.anuncios} anúncios</small>` : '') }, { t: 'Anúncio', k: 'titulo' }, { t: 'Loja', f: s => s.lojas.map(l => ln({ loja: l })).join(' ') }, { t: 'Unidades', n: 1, f: s => num(s.unidades) }, { t: 'Receita', n: 1, f: s => brl(s.receita) }, { t: 'Preço', n: 1, f: s => brl(s.preco) }, { t: 'Custo unitário', n: 1, f: s => campoCusto(s.sku, s.custo) }], rows.slice(0, 600), 'tk'); sortable('#tk'); };
+      $('#ls').innerHTML = tbl([{ t: 'SKU', f: s => esc(s.sku) + (s.anuncios > 1 ? `<br><small style="color:var(--ac)">vale para ${s.anuncios} anúncios</small>` : '') }, { t: 'Anúncio', f: s => esc(s.titulo) + (s.variacao ? `<br><small style="color:var(--mut)">${esc(s.variacao)}</small>` : '') }, { t: 'Loja', f: s => s.lojas.map(l => ln({ loja: l })).join(' ') }, { t: 'Unidades', n: 1, f: s => num(s.unidades) }, { t: 'Receita', n: 1, f: s => brl(s.receita) }, { t: 'Preço', n: 1, f: s => brl(s.preco) }, { t: 'Custo unitário', n: 1, f: s => campoCusto(s.sku, s.custo) }], rows.slice(0, 600), 'tk'); sortable('#tk'); };
     // custo salvo num campo: atualiza só o contador (redesenhar a tabela tiraria o foco de quem está digitando)
     window.aoSalvarCusto = () => { const rt = r.reduce((t, s) => t + s.receita, 0), rc = r.filter(s => s.custo != null).reduce((t, s) => t + s.receita, 0);
       if ($('#cn')) $('#cn').textContent = `${r.filter(s => s.custo != null).length}/${r.length} SKUs com custo · ${pct(rt ? rc / rt : 0)} da receita coberta`; };
