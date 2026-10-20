@@ -209,7 +209,7 @@ const ch = { responsive: true, maintainAspectRatio: false, plugins: { legend: { 
 const tbl = (cols, rows, id = '') => `<div class="tw"><table ${id ? `id="${id}"` : ''}><thead><tr>${cols.map(c => `<th class="${c.n ? 'n' : ''}">${c.t}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${cols.map(c => `<td class="${c.n ? 'n' : ''}">${c.f ? c.f(r) : esc(r[c.k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 const ln = r => `<span class="tag" style="color:${COR[r.loja]}">${esc(LOJAS[r.loja] || r.loja)}</span>`;
 const stTag = s => `<span class="tag ${/paid|active|delivered|closed|opened|answered|ANSWERED/.test(s) ? 'ok' : /cancel|paused|not_delivered|UNANSWERED|under_review/.test(s) ? 'warn' : ''}">${esc(s)}</span>`;
-function sortable(tid) { const t = $(tid); if (!t) return; t.querySelectorAll('th').forEach((th, i) => th.onclick = () => { const rows = [...t.tBodies[0].rows]; const dir = th.dataset.d = th.dataset.d === 'a' ? 'd' : 'a';
+function sortable(tid) { const t = $(tid); if (!t) return; t.querySelectorAll('th').forEach(th => th.onclick = () => { const i = th.cellIndex, rows = [...t.tBodies[0].rows]; const dir = th.dataset.d = th.dataset.d === 'a' ? 'd' : 'a';
   // ordena datas dd/mm/aaaa, hh:mm:ss como data, e "R$ 1.234,56", "12,3%", "−R$ 5,00" como número (antes datas e % eram comparados como texto)
   const v = r => { const s = r.cells[i].innerText.trim(), d =s.match(/^(\d{2})\/(\d{2})\/(\d{4}),? ?(\d{2}:\d{2}(:\d{2})?)?/);
     if (d) return Date.parse(`${d[3]}-${d[2]}-${d[1]}T${d[4] || '00:00'}`);
@@ -627,5 +627,6 @@ document.addEventListener('DOMContentLoaded', async () => { // espera extra.js e
 <script src="metrics.js"></script>
 <!-- Shopee: em breve (web/shopee.js fica fora até o login da Shopee existir) -->
 <script src="contas.js"></script>
+<script src="colunas.js"></script>
 </body>
 </html>
