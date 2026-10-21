@@ -101,7 +101,8 @@ async function ads(c) {
       for (const x of r.body.response?.campaign_list || []) for (const m of x.metrics_list || []) if (m.expense || m.impression) (camp[x.campaign_id] ||= { id: x.campaign_id, itens: [], dias: {} }).dias[isoDia(m.date)] = m;
     }
   }
-  for (const k of Object.values(camp)) saveRaw(c.loja, 'sp_ads_campaign', k.id, '', 200, k);
+  // os dias que saíram da janela de 90 dias continuam guardados: junta com os que já estavam salvos (o dia novo vence)
+  for (const k of Object.values(camp)) saveRaw(c.loja, 'sp_ads_campaign', k.id, '', 200, { ...k, dias: { ...(getRaw(c.loja, 'sp_ads_campaign', String(k.id))?.body?.dias || {}), ...k.dias } });
   const bal = await c.get('/api/v2/ads/get_total_balance', {}); if (ok(bal)) saveRaw(c.loja, 'sp_ads_saldo', 'saldo', '', 200, bal.body.response);
   c.log(`ads: ${ids.length} campanhas${falhou ? ' (com falhas)' : ''}`);
 }

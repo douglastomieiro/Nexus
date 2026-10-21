@@ -10,6 +10,29 @@ const iso = ts => new Date(ts).toISOString().replace('Z', '-00:00');
 const brDate = (d, end) => `${d.toISOString().slice(0, 10)}T${end ? '23:59:59.999' : '00:00:00.000'}-03:00`;
 const FINAL = new Set(['delivered', 'not_delivered', 'cancelled']);
 const ok2xx = s => s >= 200 && s < 300;
+
+// Séries que a API só entrega numa janela (ex.: últimos 90 dias) e que a coleta sobrescreve: cada dia vai também para
+// <recurso>_hist (mesma chave; corpo { 'AAAA-MM-DD': dia }), que nunca perde dias. O dia que já existe é atualizado (o de hoje muda a cada coleta).
+export function juntaDias(loja, recurso, chave, dias) {
+  if (!Array.isArray(dias) || !dias.length) return;
+  const h = getRaw(loja, recurso + '_hist', chave)?.body || {};
+  let mudou = false;
+  for (const d of dias) {
+    const k = String(d?.date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || JSON.stringify(h[k]) === JSON.stringify(d)) continue;
+    h[k] = d; mudou = true;
+  }
+  if (mudou) saveRaw(loja, recurso + '_hist', chave, 'dias acumulados', 200, h);
+}
+// fetchSave + histórico: antes de buscar, junta a janela que estava salva (os dias mais antigos dela não vêm mais na resposta); depois, a nova.
+// diasDe(corpo) → lista de dias ({ date, ... }).
+export async function fetchSaveHist(c, recurso, chave, url, diasDe, opts) {
+  const ant = getRaw(c.loja, recurso, chave);
+  if (ant && ok2xx(ant.status)) juntaDias(c.loja, recurso, chave, diasDe(ant.body));
+  const b = await c.fetchSave(recurso, chave, url, opts);
+  if (b) juntaDias(c.loja, recurso, chave, diasDe(b));
+  return b;
+}
 const NEG = new Set([400, 403, 404, 409, 422]);
 const NEG_TTL = 12 * HORA; // quanto tempo lembrar que um endpoint respondeu erro definitivo
 
@@ -79,7 +102,7 @@ async function itens(c) {
     if (r.status === 200) for (const it of r.body) if (it.code === 200) saveRaw(c.loja, 'item', it.body.id, 'multiget', 200, it.body);
   });
   // visitas: a API aceita 1 anúncio por chamada → série diária dos últimos 90 dias, renovada a cada 6h
-  await pool(all, CONC, id => c.fetchSave('item_visits', id, `/items/${id}/visits/time_window?last=90&unit=day`, { maxAge: 6 * HORA }));
+  await pool(all, CONC, id => fetchSaveHist(c, 'item_visits', id, `/items/${id}/visits/time_window?last=90&unit=day`, b => b?.results, { maxAge: 6 * HORA }));
   // preço de venda + promoções: só anúncios ativos (a cada 3h)
   const ativos = listRaw(c.loja, 'item').filter(i => i.body.status === 'active').map(i => i.chave);
   await pool(ativos, CONC, async id => {
@@ -323,11 +346,11 @@ async function ads(c) {
   const MC = 'clicks,prints,cost,acos,total_amount,units_quantity,sov,impression_share,top_impression_share,lost_impression_share_by_budget,lost_impression_share_by_ad_rank,acos_benchmark';
   await pool(camps, CONC, x => c.fetchSave('ads_campaign_30d', x.id, `/advertising/MLB/product_ads/campaigns/${x.id}?date_from=${de30}&date_to=${to}&metrics=${MC}`, { headers: H }));
   // série diária da conta (90 dias)
-  await c.fetchSave('ads_daily', 'conta', `${base}/ads/search?${q}&aggregation_type=daily&limit=1`, { headers: H });
+  await fetchSaveHist(c, 'ads_daily', 'conta', `${base}/ads/search?${q}&aggregation_type=daily&limit=1`, b => b?.results, { headers: H });
   // série diária por anúncio que teve custo (usada para ratear o custo de Ads entre os pedidos)
   const comCusto = anuncios.filter(a => (a.metrics?.cost ?? a.cost ?? 0) > 0 && a.campaign_id);
-  await pool(comCusto, CONC, a => c.fetchSave('ads_item_daily', a.item_id,
-    `${base}/campaigns/${a.campaign_id}/ads/metrics?${q}&aggregation_type=daily&filters[item_ids]=${a.item_id}`, { headers: H, maxAge: 2 * HORA }));
+  await pool(comCusto, CONC, a => fetchSaveHist(c, 'ads_item_daily', a.item_id,
+    `${base}/campaigns/${a.campaign_id}/ads/metrics?${q}&aggregation_type=daily&filters[item_ids]=${a.item_id}`, b => b, { headers: H, maxAge: 2 * HORA }));
 }
 
 // ───────────── HISTÓRICO DE FRETE (carga única + retomável; roda 1x por dia) ─────────────
