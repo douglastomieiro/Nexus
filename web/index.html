@@ -346,7 +346,7 @@ const DET = {
   ads: { t: 'Ads (com venda)', mes: 'ads', sku: 'ads',
     ml: 'Investimento em Product Ads (anúncios patrocinados). O ML cobra na fatura (PADS), pelos cliques/impressões, e não por venda.',
     calc: 'Custo diário de cada anúncio ÷ unidades vendidas desse anúncio no dia × unidades de cada pedido. Ou seja, o gasto do dia é rateado entre as vendas daquele dia.',
-    fonte: 'API de Product Ads (<code>ads_item_daily</code> → <code>metrics.cost</code>). A API só entrega os últimos 90 dias.' },
+    fonte: 'API de Product Ads (<code>ads_item_daily</code> → <code>metrics.cost</code>). A API só entrega os últimos 90 dias; os dias que saem da janela ficam guardados em <code>ads_item_daily_hist</code>, então pedidos mais antigos também têm Ads desde que o sistema passou a guardar o histórico.' },
   adsSemVenda: { t: 'Ads sem venda', mes: 'adsSemVenda',
     ml: 'Dinheiro gasto em Ads num dia em que aquele anúncio não vendeu nada. É custo real (o ML cobra do mesmo jeito), mas não dá para ligar a nenhum pedido.',
     calc: 'Soma do custo diário de Ads de itens/dias sem nenhuma venda no período. É subtraído direto do LUCRO REAL.',

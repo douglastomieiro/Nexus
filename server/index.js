@@ -192,6 +192,14 @@ function primeiroDia(lojas) {
   const v = db.prepare(`SELECT min(date(json_extract(body,'$.date_created'),'-3 hours')) d FROM raw WHERE recurso='order' AND status=200 AND loja IN (${lojas.map(() => '?').join(',')})`).get(...lojas)?.d || null;
   primeiroDiaCache.set(k, { t: Date.now(), v }); return v;
 }
+// 1º dia da série diária de Ads da conta (janela de 90 dias + ads_daily_hist), o mais tardio entre as contas que têm Ads:
+// o DRE usa o Ads da API nos meses inteiros a partir dele (antes, o da fatura)
+function adsDesde(lojas) {
+  const ph = lojas.map(() => '?').join(','), ini = {};
+  for (const r of all(`SELECT loja, min(substr(json_extract(j.value,'$.date'),1,10)) d FROM raw, json_each(body,'$.results') j WHERE recurso='ads_daily' AND status=200 AND loja IN (${ph}) GROUP BY loja`, ...lojas)) ini[r.loja] = r.d;
+  for (const r of all(`SELECT loja, min(j.key) d FROM raw, json_each(body) j WHERE recurso='ads_daily_hist' AND status=200 AND loja IN (${ph}) GROUP BY loja`, ...lojas)) if (r.d && !(ini[r.loja] <= r.d)) ini[r.loja] = r.d;
+  return Object.values(ini).filter(Boolean).sort().at(-1) || null;
+}
 // período: de/ate (AAAA-MM, até 60 meses) ou os últimos `meses` (padrão 12)
 app.get('/api/dre', H(q => {
   const mesBR = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 7), ehMes = s => /^\d{4}-(0[1-9]|1[0-2])$/.test(s || '');
@@ -205,7 +213,7 @@ app.get('/api/dre', H(q => {
   // custos fixos de cada mês da janela (os de "todas as contas" só entram quando o filtro é todas as contas)
   const fixos = fixosPorMes(lista, lojasSel(q), !nomes[q.loja]);
   const dia1 = primeiroDia(lojasSel(q));
-  return { desde: r.desde, de, ate, primeiroMes: dia1?.slice(0, 7) || null, primeiroDia: dia1, config: r.config, porMes: r.porMes, faturas, cobertura: r.cobertura, fixos };
+  return { desde: r.desde, de, ate, primeiroMes: dia1?.slice(0, 7) || null, primeiroDia: dia1, adsDesde: adsDesde(lojasSel(q)), config: r.config, porMes: r.porMes, faturas, cobertura: r.cobertura, fixos };
 }));
 registrarFixos(app, { H, nomes }); // Financeiro (DRE) › custos fixos do negócio
 app.get('/api/config', H(() => ({ ...getConfig(), auto: Object.fromEntries(Object.keys(nomes).map(l => { const a = aliquotaAuto(l); return [l, a && { cnpj: a.cnpj, nome: a.nome, anexo: a.anexo, meses: Object.entries(a.meses).slice(-6).map(([mes, v]) => ({ mes, ...v })) }]; })) })));
@@ -214,11 +222,21 @@ app.post('/api/config', H((_, req) => { for (const k of [...Object.keys(nomes).m
     setConfig(k, v);
   }
   if (req.body.aliquota_modo != null) { if (!['manual'].includes(req.body.aliquota_modo)) throw Object.assign(new Error('modo inválido'), { status: 400 }); setConfig('aliquota_modo', req.body.aliquota_modo); } return getConfig(); }));
-app.get('/api/ads', H(q => ({
-  campanhas: all(`SELECT loja, body FROM raw WHERE recurso='ads_campaign' AND ${OK} AND ${lojaSql(q)}`).map(r => ({ loja: r.loja, ...JSON.parse(r.body) })),
-  anuncios: all(`SELECT loja, body FROM raw WHERE recurso='ads_ad' AND ${OK} AND ${lojaSql(q)}`).map(r => ({ loja: r.loja, ...JSON.parse(r.body) })),
-  diario: all(`SELECT loja, body FROM raw WHERE recurso='ads_daily' AND ${OK} AND ${lojaSql(q)}`).map(r => ({ loja: r.loja, dias: JSON.parse(r.body).results || [] })),
-})));
+// diario = série diária da conta (janela de 90 dias da API). Com ?dias= acima de 90, junta os dias guardados em ads_daily_hist
+// desde então (no mesmo dia vale a janela).
+app.get('/api/ads', H(q => {
+  const diario = all(`SELECT loja, body FROM raw WHERE recurso='ads_daily' AND ${OK} AND ${lojaSql(q)}`).map(r => ({ loja: r.loja, dias: JSON.parse(r.body).results || [] }));
+  if (parseInt(q.dias) > 90) for (const r of all(`SELECT loja, body FROM raw WHERE recurso='ads_daily_hist' AND ${OK} AND ${lojaSql(q)}`)) {
+    let x = diario.find(y => y.loja === r.loja); if (!x) diario.push(x = { loja: r.loja, dias: [] });
+    const tem = new Set(x.dias.map(d => String(d.date).slice(0, 10))), ini = desde(q);
+    x.dias = [...Object.entries(JSON.parse(r.body)).filter(([d]) => d >= ini && !tem.has(d)).map(([, v]) => v), ...x.dias].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  }
+  return {
+    campanhas: all(`SELECT loja, body FROM raw WHERE recurso='ads_campaign' AND ${OK} AND ${lojaSql(q)}`).map(r => ({ loja: r.loja, ...JSON.parse(r.body) })),
+    anuncios: all(`SELECT loja, body FROM raw WHERE recurso='ads_ad' AND ${OK} AND ${lojaSql(q)}`).map(r => ({ loja: r.loja, ...JSON.parse(r.body) })),
+    diario,
+  };
+}));
 
 // Detalhe ao vivo (sob demanda) com cache de 5 min: /api/live?tipo=order|shipment|item|claim|pack&id=...&loja=loja1
 app.get('/api/live', async (req, res) => {

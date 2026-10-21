@@ -37,13 +37,17 @@ const catInfo = cacheDe(600e3, () => {
 });
 const cat = id => catInfo()[id] || { nome: id || 'Sem categoria', raiz: id || 'Sem categoria', caminho: id || 'Sem categoria' };
 
-// visitas por dia: por anúncio (série de 90 dias, renovada a cada 6h) e somadas por loja; antes do início da série dos anúncios, a série da conta (150 dias)
+// visitas por dia: por anúncio (série de 90 dias, renovada a cada 6h, + os dias que a coleta guardou depois que saíram dela em item_visits_hist;
+// no mesmo dia vale a série) e somadas por loja; antes do início da série dos anúncios, a série da conta (150 dias)
 const visitas = cacheDe(120e3, () => {
   const porItem = {}, porLoja = {};
-  for (const r of db.prepare(`SELECT loja, chave, body FROM raw WHERE recurso='item_visits' AND status=200`).iterate()) {
-    const s = {}; for (const x of parse(r.body)?.results || []) { const d = String(x.date).slice(0, 10); s[d] = x.total || 0; const l = porLoja[r.loja] ||= {}; l[d] = (l[d] || 0) + (x.total || 0); }
-    porItem[r.loja + ':' + r.chave] = s;
+  for (const r of db.prepare(`SELECT loja, chave, body FROM raw WHERE recurso='item_visits_hist' AND status=200`).iterate()) {
+    const s = porItem[r.loja + ':' + r.chave] = {}; for (const [d, x] of Object.entries(parse(r.body) || {})) s[d] = x?.total || 0;
   }
+  for (const r of db.prepare(`SELECT loja, chave, body FROM raw WHERE recurso='item_visits' AND status=200`).iterate()) {
+    const s = porItem[r.loja + ':' + r.chave] ||= {}; for (const x of parse(r.body)?.results || []) s[String(x.date).slice(0, 10)] = x.total || 0;
+  }
+  for (const [k, s] of Object.entries(porItem)) { const l = porLoja[k.split(':')[0]] ||= {}; for (const [d, v] of Object.entries(s)) l[d] = (l[d] || 0) + v; }
   for (const r of db.prepare(`SELECT loja, body FROM raw WHERE recurso='visitas_conta_dia' AND status=200`).iterate()) {
     const l = porLoja[r.loja] ||= {}, ini = Object.keys(l).sort()[0] || '9999';
     for (const x of parse(r.body)?.results || []) { const d = String(x.date).slice(0, 10); if (d < ini) l[d] = x.total || 0; }

@@ -28,12 +28,15 @@ function drePeriodo(arg) {
 // x = linha do mês já montada (pedidos, semFatura, sp); ml / shopee = canais que aparecem na tela.
 // d.primeiroDia = 1º pedido do ML; d.shopee.primeiroDia / adsDesde = 1º pedido e 1º dia de Ads coletados da Shopee (só na versão com Shopee).
 const dataBR = s => `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(2, 4)}`;
+// Mês inteiro dentro da série diária da API de Ads: a janela de 90 dias ou, desde d.adsDesde, o histórico que a coleta guarda
+// (sem a chave adsDesde = servidor antigo: só a janela).
+const adsCobre = (mes, d) => mes > new Date(Date.now() - 3 * 3600e3 - 89 * 864e5).toISOString().slice(0, 7) || (!!d.adsDesde && mes + '-01' >= d.adsDesde);
 function avisosDoMes(x, d, { ml = true, shopee = true } = {}) {
-  const a = [], atual = drePeriodo('1m').meses[0], janelaAds = new Date(Date.now() - 3 * 3600e3 - 89 * 864e5).toISOString().slice(0, 7);
+  const a = [], atual = drePeriodo('1m').meses[0];
   const comecaNoMeio = dia => dia && x.mes === dia.slice(0, 7) && !dia.endsWith('-01');
   if (x.mes === atual) a.push('mês em andamento (valores parciais)');
   if (ml && comecaNoMeio(d.primeiroDia)) a.push(`pedidos do Mercado Livre só a partir de ${dataBR(d.primeiroDia)}`);
-  if (ml && x.pedidos && x.semFatura) a.push(x.mes > janelaAds ? 'sem fatura do Mercado Livre: outras cobranças (Full, DIFAL…) ficam de fora' : 'sem fatura do Mercado Livre: Ads e outras cobranças ficam de fora');
+  if (ml && x.pedidos && x.semFatura) a.push(adsCobre(x.mes, d) ? 'sem fatura do Mercado Livre: outras cobranças (Full, DIFAL…) ficam de fora' : 'sem fatura do Mercado Livre: Ads e outras cobranças ficam de fora');
   const S = d.shopee;
   if (shopee && S && x.sp) {
     if (comecaNoMeio(S.primeiroDia)) a.push(`pedidos da Shopee só a partir de ${dataBR(S.primeiroDia)}`);
@@ -164,7 +167,6 @@ Object.assign(VIEWS, {
   async dre(arg) {
     const P = drePeriodo(arg), sel = P.sel, umMes = P.tipo === 'mes';
     const d = await api('dre', `&de=${P.de}&ate=${P.ate}`);
-    const hojeBR = new Date(Date.now() - 3 * 3600e3 - 89 * 864e5).toISOString().slice(0, 7);
     const g = {}, mesVazio = mes => ({ mes, pedidos: 0, receita: 0, devolvido: 0, comissao: 0, frete: 0, imposto: 0, custo: 0, ads: 0, adsSemVenda: 0, lucro: 0, perdaDevolucao: 0, freteNF: 0 });
     d.porMes.forEach(x => { const o = g[x.mes] ||= mesVazio(x.mes);
       for (const k of Object.keys(o)) if (k !== 'mes') o[k] += x[k] || 0; });
@@ -182,7 +184,7 @@ Object.assign(VIEWS, {
       o.parcelamento += f.classes.parcelamento || 0; o.devolucao += f.classes.devolucao || 0; });
     const todas = Object.values(g).sort((a, b) => a.mes.localeCompare(b.mes)).map(m => {
       const f = fat[m.mes];
-      const coberto = m.mes > hojeBR; // mês inteiro dentro da janela de 90 dias da API de Ads
+      const coberto = adsCobre(m.mes, d);
       const adsApi = m.ads + m.adsSemVenda;
       const adsTotal = coberto || !f ? adsApi : f.ads; // fora da janela: o Product Ads da fatura (já líquido da bonificação BPAD)
       const outras = f ? f.outras : 0;
@@ -238,7 +240,7 @@ Object.assign(VIEWS, {
       ${card2(`Perda real com devoluções${comSp ? ' (ML)' : ''}`, tot('perdaDevolucao') >= 0 ? '−' + brl(tot('perdaDevolucao')) : '+' + brl(-tot('perdaDevolucao')), tot('perdaDevolucao') > 0 ? 'bad' : 'ok')}${card2(`Estornado em pedidos cancelados${comSp ? ' (ML)' : ''} <span title="Valor que voltou ao comprador nos pedidos cancelados com reembolso (a maioria cancelada antes do envio). Esses pedidos já estão fora da receita: não é prejuízo. O que você perdeu de fato está em “Perda real com devoluções”." style="cursor:help">ⓘ</span>`, brl(tot('devolvido')))}</div>
       ${umMes ? '' : `<div class="box" style="margin-bottom:14px"><h3>${comFixos ? 'Lucro líquido' : 'Lucro final'} e margem por mês</h3><div style="height:260px"><canvas id="c1"></canvas></div></div>`}
       <div class="box" style="margin-bottom:14px"><h3>${umMes ? `DRE de ${mesNome(sel)}` : `DRE mensal · ${rot}`} <small>(mês = data do pedido, fuso de Brasília)</small></h3>${dreTabela(tabela, cats, { total: !umMes })}
-        <p style="color:var(--mut);margin:8px 0 0;font-size:12px">Receita já desconta devoluções (pedidos reembolsados saem da receita). Por isso o “estornado em pedidos cancelados” não é descontado de novo: o que entra no resultado é a perda real (frete, tarifa de devolução e comissão não estornados). “Outras (fatura)” = serviços do Full (armazenagem, coleta, inconformidade), eShop, DIFAL e cobranças não identificadas, líquidas das bonificações. <b>Não</b> entram aqui: a taxa de parcelamento (CFONPN — acréscimo pago pelo comprador e repassado ao Mercado Pago, soma zero para você) e as tarifas de devolução (já contadas pedido a pedido em “Perda devol.”). Ads: API de Ads nos meses inteiros dentro dos últimos 90 dias; antes disso, o valor da fatura. Atenção: a fatura do ML é por <b>período de cobrança</b> (≈ dia 16 do mês anterior ao dia 15), não por mês-calendário — “Outras” e o Ads da fatura são aproximações do mês. O mês corrente usa a fatura ainda em aberto (parcial).${comSp ? ' Shopee: valores do extrato (escrow) de cada pedido pela data do pedido; Ads = gasto total do mês na Shopee (inclui dias sem venda); ajustes = cupons do vendedor, compensações e retenções.' : ''}${comFixos ? ' Custos fixos: valor do mês inteiro, inclusive no mês corrente (que ainda está com as vendas pela metade).' : ''}</p></div>
+        <p style="color:var(--mut);margin:8px 0 0;font-size:12px">Receita já desconta devoluções (pedidos reembolsados saem da receita). Por isso o “estornado em pedidos cancelados” não é descontado de novo: o que entra no resultado é a perda real (frete, tarifa de devolução e comissão não estornados). “Outras (fatura)” = serviços do Full (armazenagem, coleta, inconformidade), eShop, DIFAL e cobranças não identificadas, líquidas das bonificações. <b>Não</b> entram aqui: a taxa de parcelamento (CFONPN — acréscimo pago pelo comprador e repassado ao Mercado Pago, soma zero para você) e as tarifas de devolução (já contadas pedido a pedido em “Perda devol.”). Ads: API de Ads nos meses inteiros cobertos pela série diária (os últimos 90 dias e os dias que o sistema guardou desde que passou a acumular o histórico); antes disso, o valor da fatura. Atenção: a fatura do ML é por <b>período de cobrança</b> (≈ dia 16 do mês anterior ao dia 15), não por mês-calendário — “Outras” e o Ads da fatura são aproximações do mês. O mês corrente usa a fatura ainda em aberto (parcial).${comSp ? ' Shopee: valores do extrato (escrow) de cada pedido pela data do pedido; Ads = gasto total do mês na Shopee (inclui dias sem venda); ajustes = cupons do vendedor, compensações e retenções.' : ''}${comFixos ? ' Custos fixos: valor do mês inteiro, inclusive no mês corrente (que ainda está com as vendas pela metade).' : ''}</p></div>
       <div class="box" style="margin-bottom:14px" id="cfbox"></div>
       <div class="box"><h3>Faturas do Mercado Livre (cobranças por tipo, já líquidas das bonificações)</h3>${fats.length ? fats.slice().reverse().map(f => `<details style="margin-bottom:6px"><summary style="cursor:pointer">${ln(f)} ${esc(f.grupo === 'MP' ? 'Mercado Pago' : 'Mercado Livre')} · fatura ${esc(f.key)} · <b>${brl(f.total)}</b>
         ${Object.entries(f.classes).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span class="tag">${esc(k)} ${brl(v)}</span>`).join(' ')}</summary>

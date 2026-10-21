@@ -64,13 +64,19 @@ const dia = s => new Date(Date.parse(s) - 3 * 3600e3).toISOString().slice(0, 10)
 const r2 = n => Math.round(n * 100) / 100;
 
 function carregarAds(lojas) {
-  // ads[loja][item][dia] = custo
-  const out = {};
+  // ads[loja][item][dia] = custo. Janela de 90 dias da API (ads_item_daily) + dias que a coleta guardou depois que saíram dela
+  // (ads_item_daily_hist, corpo { 'AAAA-MM-DD': dia }); no mesmo dia vale a janela.
+  const out = {}, custo = d => (d?.results || []).reduce((t, x) => t + (x.metrics?.cost || 0), 0);
   for (const loja of lojas) {
     out[loja] = {};
-    for (const row of db.prepare("SELECT chave, body FROM raw WHERE loja=? AND recurso='ads_item_daily' AND status=200").all(loja)) {
+    for (const row of db.prepare("SELECT chave, body FROM raw WHERE loja=? AND recurso='ads_item_daily_hist' AND status=200").all(loja)) {
       const m = out[loja][row.chave] = {};
-      for (const d of JSON.parse(row.body)) for (const x of d.results || []) m[d.date] = (m[d.date] || 0) + (x.metrics?.cost || 0);
+      for (const [d, x] of Object.entries(JSON.parse(row.body))) m[d] = custo(x);
+    }
+    for (const row of db.prepare("SELECT chave, body FROM raw WHERE loja=? AND recurso='ads_item_daily' AND status=200").all(loja)) {
+      const j = {};
+      for (const d of JSON.parse(row.body)) j[d.date] = (j[d.date] || 0) + custo(d);
+      Object.assign(out[loja][row.chave] ||= {}, j);
     }
   }
   return out;
