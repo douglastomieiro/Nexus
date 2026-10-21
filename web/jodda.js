@@ -175,7 +175,11 @@ VIEWS.pedidos = async function () {
   let cur = [];
   const draw = () => {
     cur = ordena(filtrar(), st); const fat = cur.reduce((t, x) => t + x.receita, 0), luc = cur.reduce((t, x) => t + x.lucro, 0), filtrado = f.lg || f.q || f.val !== '';
-    $('#pk').innerHTML = kpi('Total pedidos', num(cur.length), filtrado ? 'com os filtros aplicados' : 'no período selecionado', 'pedidos', 'blue') + kpi('Faturamento', brl(fat), 'valor total vendido', 'lucro', 'green') + kpi('Margem média', pc(fat ? luc / fat : 0, 2), 'média ponderada pelo faturamento', 'promocoes', 'amber') + kpi('Cancelados', num(R.cancelados), 'pedidos cancelados no período', 'cancel', 'red');
+    // a lista traz no máximo os 3.000 pedidos mais recentes: sem filtro, os cartões usam os totais do período inteiro (calculados no servidor)
+    const parcial = R.total > all.length, doPeriodo = parcial && !filtrado;
+    const nPed = doPeriodo ? R.total : cur.length, fatK = doPeriodo ? R.faturamento : fat, mgK = doPeriodo ? R.margemMedia : fat ? luc / fat : 0;
+    const sub = filtrado ? (parcial ? `com os filtros, entre os ${num(all.length)} mais recentes` : 'com os filtros aplicados') : 'no período selecionado';
+    $('#pk').innerHTML = kpi('Total pedidos', num(nPed), sub, 'pedidos', 'blue') + kpi('Faturamento', brl(fatK), filtrado && parcial ? sub : 'valor total vendido', 'lucro', 'green') + kpi('Margem média', pc(mgK, 2), filtrado && parcial ? sub : 'média ponderada pelo faturamento', 'promocoes', 'amber') + kpi('Cancelados', num(R.cancelados), 'pedidos cancelados no período', 'cancel', 'red');
     $('#pn').textContent = `${num(cur.length)} registros${R.total > all.length ? ` · mostrando os ${num(all.length)} mais recentes de ${num(R.total)}` : ''}`;
     $('#ptb thead').innerHTML = `<tr><th>Produto</th>${thS('Pedido', 'data', st)}<th>Canal</th>${thS('Qtd', 'qtd', st, 'c')}${thS('Total', 'receita', st, 'n')}<th class="n">Custo</th><th class="n">Comissão</th>${thS('Frete', 'frete', st, 'n')}<th class="n">Reembolso</th><th class="n">Imposto</th><th class="n">Repasse</th>${thS('Resultado', 'lucro', st, 'n')}${thS('Margem', 'margem', st, 'c')}</tr>`;
     for (const th of $('#ptb thead').rows[0].cells) { const k = th.textContent.replace(/[▲▼⇅]/g, '').trim(); if (TIT[k]) th.title = TIT[k] + ' · passe o mouse nos valores para ver a conta'; }
