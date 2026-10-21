@@ -24,6 +24,24 @@ function drePeriodo(arg) {
   if (lista.length > 1) { const ok = lista.filter(m => m >= somaMes(lista.at(-1), -59)); return fim({ sel: ok.join(','), tipo: 'escolhidos', meses: ok }); }
   return drePeriodo('12m');
 }
+// Por que um mês do DRE não está fechado (vai no título da coluna, com ⚠, e na caixa acima da tabela).
+// x = linha do mês já montada (pedidos, semFatura, sp); ml / shopee = canais que aparecem na tela.
+// d.primeiroDia = 1º pedido do ML; d.shopee.primeiroDia / adsDesde = 1º pedido e 1º dia de Ads coletados da Shopee (só na versão com Shopee).
+const dataBR = s => `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(2, 4)}`;
+function avisosDoMes(x, d, { ml = true, shopee = true } = {}) {
+  const a = [], atual = drePeriodo('1m').meses[0], janelaAds = new Date(Date.now() - 3 * 3600e3 - 89 * 864e5).toISOString().slice(0, 7);
+  const comecaNoMeio = dia => dia && x.mes === dia.slice(0, 7) && !dia.endsWith('-01');
+  if (x.mes === atual) a.push('mês em andamento (valores parciais)');
+  if (ml && comecaNoMeio(d.primeiroDia)) a.push(`pedidos do Mercado Livre só a partir de ${dataBR(d.primeiroDia)}`);
+  if (ml && x.pedidos && x.semFatura) a.push(x.mes > janelaAds ? 'sem fatura do Mercado Livre: outras cobranças (Full, DIFAL…) ficam de fora' : 'sem fatura do Mercado Livre: Ads e outras cobranças ficam de fora');
+  const S = d.shopee;
+  if (shopee && S && x.sp) {
+    if (comecaNoMeio(S.primeiroDia)) a.push(`pedidos da Shopee só a partir de ${dataBR(S.primeiroDia)}`);
+    if (!S.adsDesde || x.mes < S.adsDesde.slice(0, 7)) a.push('Ads da Shopee não coletado');
+    else if (comecaNoMeio(S.adsDesde)) a.push(`Ads da Shopee só a partir de ${dataBR(S.adsDesde)}`);
+  }
+  return a;
+}
 
 // DRE com meses em colunas: seções escuras, subtotais em destaque e coluna de total (estilo Jodda). Linhas = {mes, receita, comissao, frete, imposto, custo, adsTotal, perdaDevolucao, outras, final, ...}
 // cats = categorias de custo fixo (com elas, o DRE ganha a seção CUSTOS FIXOS e o lucro líquido; x.fixos = { categoria: valor }, x.liquido)
@@ -75,7 +93,7 @@ function dreTabela(linhas, cats = [], { total = true } = {}) {
     eq(`Margem ${cats.length ? 'antes dos custos fixos' : 'final'}`, x => pct(x.margem), () => pct(totRec ? sm(0, x => x.final) / totRec : 0)),
     eq(comSp ? 'Pedidos (ML + Shopee)' : 'Pedidos', x => num(x.pedidosTotal ?? x.pedidos), () => num(sm(0, x => x.pedidosTotal ?? x.pedidos))),
   ];
-  return `<div class="tw dre"><table id="tdre"><thead><tr><th>${'Demonstrativo'}</th>${L.map(x => `<th class="n">${mesNome(x.mes)}</th>`).join('')}${T('<th class="n">Total</th>')}</tr></thead><tbody>${out.join('')}</tbody></table></div>`;
+  return `<div class="tw dre"><table id="tdre"><thead><tr><th>${'Demonstrativo'}</th>${L.map(x => x.avisos?.length ? `<th class="n" title="${esc(x.avisos.join(' · '))}">${mesNome(x.mes)} <span style="color:#f59e0b;cursor:help">⚠</span></th>` : `<th class="n">${mesNome(x.mes)}</th>`).join('')}${T('<th class="n">Total</th>')}</tr></thead><tbody>${out.join('')}</tbody></table></div>`;
 }
 
 // Caixa "Custos fixos do negócio" do DRE: lista, cadastra, altera e exclui. Valor por mês, com mês de início e (se tiver) de fim.
@@ -173,6 +191,7 @@ Object.assign(VIEWS, {
       return { ...m, adsTotal, adsFonte: coberto || !f ? 'API' : 'fatura', outras, semFatura: !f, finalML, sp, spLucro, final, receitaTotal, pedidosTotal: m.pedidos + (sp?.pedidos || 0),
         impostoTotal: m.imposto + (sp?.imposto || 0), margem: receitaTotal ? final / receitaTotal : 0, fixos, fixosTotal, liquido: final - fixosTotal };
     });
+    todas.forEach(x => { x.avisos = avisosDoMes(x, d); });
     // período escolhido: os cartões somam só ele; com um mês só, a tabela mostra também o mês anterior para comparar
     const linhas = todas.filter(x => P.meses.includes(x.mes));
     const tabela = P.tabela ? todas.filter(x => P.tabela.includes(x.mes)) : linhas;
@@ -186,6 +205,12 @@ Object.assign(VIEWS, {
     if (d.cobertura.pctReceitaSemCusto > 0.01) aviso.push(`${pct(d.cobertura.pctReceitaSemCusto)} da receita sem custo de produto cadastrado — lucro superestimado.`);
     if (d.shopee?.cobertura?.pctReceitaSemCusto > 0.01) aviso.push(`Shopee: ${pct(d.shopee.cobertura.pctReceitaSemCusto)} da receita sem custo de produto cadastrado — lucro superestimado.`);
     if (d.cobertura.pctReceitaFreteEstimado > 0.01) aviso.push(`${pct(d.cobertura.pctReceitaFreteEstimado)} da receita com frete estimado (coleta histórica ainda em andamento ou frete indisponível).`);
+    // meses incompletos da tabela; meses seguidos com o mesmo aviso viram uma linha só ("nov/25 a jun/26: …")
+    const comAviso = tabela.filter(x => x.avisos.length), blocos = [];
+    for (const x of comAviso) { const txt = x.avisos.join('; '), u = blocos.at(-1);
+      if (u && u.txt === txt && somaMes(u.ate, 1) === x.mes) u.ate = x.mes; else blocos.push({ de: x.mes, ate: x.mes, txt }); }
+    if (blocos.length) aviso.push(`<b>${comAviso.length > 1 ? 'Meses incompletos' : 'Mês incompleto'}</b>: o resultado ${comAviso.length > 1 ? 'desses meses' : 'deste mês'} ainda não está fechado.
+      <ul style="margin:6px 0 0;padding-left:20px">${blocos.map(g => `<li><b>${g.de === g.ate ? mesNome(g.de) : `${mesNome(g.de)} a ${mesNome(g.ate)}`}</b>: ${esc(g.txt)}</li>`).join('')}</ul>`);
     // opções do período: atalhos, anos e meses desde o pedido mais antigo (até 60 meses), mais intervalo e meses escolhidos à mão
     const atual = drePeriodo('1m').meses[0], SEL = 'padding:7px 9px;border:1px solid var(--bd);border-radius:7px;font:inherit';
     const primeiro = [d.primeiroMes, todas[0]?.mes, somaMes(atual, -11)].filter(Boolean).sort()[0];

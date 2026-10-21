@@ -185,12 +185,12 @@ app.get('/api/custos', H(q => { // SKUs do ML + SKUs que só vendem na Shopee (o
   return ml.sort((a, b) => b.receita - a.receita);
 }));
 app.post('/api/custos', H((_, req) => { for (const { sku, custo } of [].concat(req.body)) if (sku) setCusto(String(sku), custo); return { ok: true }; }));
-// mês (AAAA-MM) do pedido mais antigo das contas: o DRE oferece os meses a partir dele (guardado por 10 min)
-const primeiroMesCache = new Map();
-function primeiroMes(lojas) {
-  const k = lojas.join(','), c = primeiroMesCache.get(k); if (c && Date.now() - c.t < 600e3) return c.v;
-  const v = db.prepare(`SELECT substr(min(date(json_extract(body,'$.date_created'),'-3 hours')),1,7) m FROM raw WHERE recurso='order' AND status=200 AND loja IN (${lojas.map(() => '?').join(',')})`).get(...lojas)?.m || null;
-  primeiroMesCache.set(k, { t: Date.now(), v }); return v;
+// dia (AAAA-MM-DD, Brasília) do pedido mais antigo das contas: o DRE oferece os meses a partir dele e avisa se o 1º mês começa no meio (guardado por 10 min)
+const primeiroDiaCache = new Map();
+function primeiroDia(lojas) {
+  const k = lojas.join(','), c = primeiroDiaCache.get(k); if (c && Date.now() - c.t < 600e3) return c.v;
+  const v = db.prepare(`SELECT min(date(json_extract(body,'$.date_created'),'-3 hours')) d FROM raw WHERE recurso='order' AND status=200 AND loja IN (${lojas.map(() => '?').join(',')})`).get(...lojas)?.d || null;
+  primeiroDiaCache.set(k, { t: Date.now(), v }); return v;
 }
 // período: de/ate (AAAA-MM, até 60 meses) ou os últimos `meses` (padrão 12)
 app.get('/api/dre', H(q => {
@@ -204,7 +204,8 @@ app.get('/api/dre', H(q => {
   const faturas = faturasML(lojasSel(q)).filter(f => (f.grupo === 'ML' || f.grupo === 'MP') && f.mes >= de && f.mes <= ate);
   // custos fixos de cada mês da janela (os de "todas as contas" só entram quando o filtro é todas as contas)
   const fixos = fixosPorMes(lista, lojasSel(q), !nomes[q.loja]);
-  return { desde: r.desde, de, ate, primeiroMes: primeiroMes(lojasSel(q)), config: r.config, porMes: r.porMes, faturas, cobertura: r.cobertura, fixos };
+  const dia1 = primeiroDia(lojasSel(q));
+  return { desde: r.desde, de, ate, primeiroMes: dia1?.slice(0, 7) || null, primeiroDia: dia1, config: r.config, porMes: r.porMes, faturas, cobertura: r.cobertura, fixos };
 }));
 registrarFixos(app, { H, nomes }); // Financeiro (DRE) › custos fixos do negócio
 app.get('/api/config', H(() => ({ ...getConfig(), auto: Object.fromEntries(Object.keys(nomes).map(l => { const a = aliquotaAuto(l); return [l, a && { cnpj: a.cnpj, nome: a.nome, anexo: a.anexo, meses: Object.entries(a.meses).slice(-6).map(([mes, v]) => ({ mes, ...v })) }]; })) })));
