@@ -37,8 +37,10 @@ function avisosDoMes(x, d, { ml = true, shopee = true } = {}) {
   const S = d.shopee;
   if (shopee && S && x.sp) {
     if (comecaNoMeio(S.primeiroDia)) a.push(`pedidos da Shopee só a partir de ${dataBR(S.primeiroDia)}`);
-    if (!S.adsDesde || x.mes < S.adsDesde.slice(0, 7)) a.push('Ads da Shopee não coletado');
-    else if (comecaNoMeio(S.adsDesde)) a.push(`Ads da Shopee só a partir de ${dataBR(S.adsDesde)}`);
+    // sem a chave adsDesde = servidor antigo (ainda não reiniciado): não avisa sobre Ads, para não avisar à toa
+    const semAds = 'adsDesde' in S && (!S.adsDesde || x.mes < S.adsDesde.slice(0, 7));
+    if (semAds) a.push('Ads da Shopee não coletado');
+    else if (S.adsDesde && comecaNoMeio(S.adsDesde)) a.push(`Ads da Shopee só a partir de ${dataBR(S.adsDesde)}`);
   }
   return a;
 }
