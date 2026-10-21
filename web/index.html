@@ -309,12 +309,37 @@ const corL = n => n < 0 ? 'bad' : '';
 let CUSTOS_TELA = null;
 // vigência escolhida na tela de custos (#cvig): undefined = a partir de hoje; '0000-00-00' = todo o período; ou AAAA-MM-DD
 const custoDesde = () => { const vg = document.getElementById('cvig'); return !vg || vg.value === 'hoje' ? undefined : vg.value === 'sempre' ? '0000-00-00' : $('#cvd').value || undefined; };
+// servidor com vigência do custo (depois de reiniciado): só então a tela pergunta "correção ou mudança"
+fetch('api/custos/vigencia').then(r => (r.ok ? r.json() : null)).then(j => { window.VIGENCIA_OK = !!j?.ok; }).catch(() => {});
+// pergunta ao lado do campo (ou botão): a troca é correção (vale para todo o período) ou o custo mudou agora (vale a partir de hoje)?
+// Resolve 'sempre', 'hoje' ou null (cancelou: Esc ou Cancelar).
+function perguntaVigencia(el, titulo) {
+  return new Promise(fim0 => {
+    document.getElementById('pvig')?.remove();
+    const b = el.getBoundingClientRect(), d = document.createElement('div'); d.id = 'pvig';
+    d.style.cssText = `position:fixed;z-index:50;top:${Math.max(8, Math.min(b.bottom + 6, innerHeight - 190))}px;left:${Math.max(8, Math.min(b.right - 340, innerWidth - 350))}px;width:340px;background:#fff;border:1px solid var(--bd);border-radius:10px;box-shadow:0 8px 24px rgba(15,23,42,.18);padding:12px;font-size:12.5px;line-height:1.4`;
+    d.innerHTML = `<b>${titulo}</b><p style="margin:6px 0 10px;color:var(--mut)">É uma <b>correção</b> (o valor antigo estava errado: refaz o lucro de todo o período) ou o custo do produto <b>mudou agora</b> (os pedidos antigos continuam com o custo antigo)?</p>
+      <div style="display:flex;flex-direction:column;gap:6px"><button data-r="sempre">Correção: vale para todo o período</button><button data-r="hoje" style="background:#fff;color:var(--ac);border:1px solid var(--bd)">Mudou agora: vale a partir de hoje</button><button data-r="" style="background:none;color:var(--mut);padding:4px">Cancelar</button></div>`;
+    const esc = e => { if (e.key === 'Escape') fim(null); };
+    const fim = r => { d.remove(); removeEventListener('keydown', esc, true); fim0(r); };
+    d.onclick = e => { const t = e.target.closest('button'); if (t) fim(t.dataset.r || null); };
+    addEventListener('keydown', esc, true); document.body.appendChild(d); d.querySelector('button').focus();
+  });
+}
 async function salvaCusto(inp) {
   let v = inp.value.trim(); if (v.includes(',')) v = v.replace(/\./g, '').replace(',', '.'); // 1.234,56 → 1234.56
+  let desde = custoDesde();
+  // trocou um custo que já existia sem escolher a vigência: pergunta se é correção ou mudança de agora em diante
+  const antes = inp.defaultValue.trim();
+  if (desde === undefined && window.VIGENCIA_OK && v !== '' && antes !== '' && Number.isFinite(+v) && +antes !== +v) {
+    const r0 = await perguntaVigencia(inp, `O custo mudou de ${brl(+antes)} para ${brl(+v)}.`);
+    if (!r0) { inp.value = inp.defaultValue; return; }
+    desde = r0 === 'sempre' ? '0000-00-00' : new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10); // escolha explícita: hoje cria (ou troca) o custo de hoje
+  }
   inp.style.outline = '1px solid var(--warn)';
-  const desde = custoDesde();
   const r = await fetch('api/custos', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sku: inp.dataset.sku, custo: v === '' ? null : v, desde }) }).catch(() => null);
-  inp.style.outline = r && r.ok ? '1px solid var(--ok)' : '2px solid var(--bad)'; inp.title = r && r.ok ? 'salvo' : 'não foi possível salvar (use só números)';
+  inp.style.outline = r && r.ok ? '1px solid var(--ok)' : '2px solid var(--bad)'; inp.title = r && r.ok ? (desde === '0000-00-00' ? 'salvo: vale para todo o período' : 'salvo') : 'não foi possível salvar (use só números)';
+  if (r && r.ok) inp.defaultValue = inp.value; // a próxima troca compara com o valor salvo agora
   // custo com data futura ainda não é o de hoje: a lista na memória continua com o atual
   if (r && r.ok && CUSTOS_TELA && !(desde && desde > new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10))) { const c = v === '' ? null : +v; for (const s of CUSTOS_TELA) if (s.sku === inp.dataset.sku) { s.custo = c; s.custoUnit = c; if ('semCusto' in s) s.semCusto = c == null; } window.aoSalvarCusto?.(); }
 }
@@ -506,6 +531,9 @@ const VIEWS2 = {
         let v = m[2]; if (v.includes(',')) v = v.replace(/\./g, '').replace(',', '.'); // 1.234,56 → 1234.56
         if (!Number.isFinite(+v)) { ruins.push(l); continue; } lote.push({ sku: m[1].trim(), custo: +v, desde: custoDesde() }); }
       if (!lote.length) { $('#lok').className = 'bad'; $('#lok').textContent = 'Nenhuma linha válida'; return; }
+      // lote sem vigência escolhida e com SKUs que já tinham outro custo: pergunta uma vez para todos
+      const mudam = custoDesde() === undefined && window.VIGENCIA_OK ? lote.filter(l => (CUSTOS_TELA || []).some(s => s.sku === l.sku && s.custo != null && Math.abs(s.custo - l.custo) > 0.001)).length : 0;
+      if (mudam) { const r0 = await perguntaVigencia($('#lsv'), `${mudam} SKU(s) da lista já tinham outro custo.`); if (!r0) return; const dl = r0 === 'sempre' ? '0000-00-00' : new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10); lote.forEach(l => { l.desde = dl; }); }
       const res = await fetch('api/custos', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(lote) }).catch(() => null);
       $('#lok').className = res && res.ok ? 'ok' : 'bad';
       $('#lok').textContent = res && res.ok ? `${lote.length} custo(s) salvos${ruins.length ? ` · ${ruins.length} linha(s) ignorada(s): ${ruins.slice(0, 3).join(' | ')}` : ''}` : 'Falha ao salvar';
