@@ -100,6 +100,7 @@ export function registrar(app, { H, nomes, lojasSel, dias }) {
     const rows = todos.map(p => ({ id: p.id, loja: p.loja, data: p.data, itens: p.itens.map(semQtd), sku: p.det[0]?.sku || null, qtd: p.qtd || 0, thumb: thumbDe(p.loja, p.itemId), itemId: p.itemId, envio: p.envio,
       receita: r2(p.receita), custo: r2(p.custo), comissao: r2(p.comissao), frete: r2(p.frete), reembolso: r2(p.devolucao), imposto: r2(p.imposto), ads: r2(p.ads), repasse: r2(p.receita - p.devolucao - p.comissao - p.frete),
       freteNF: r2(p.freteNF), impostoFrete: r2(p.impostoFrete), // frete do comprador na NF: não é receita nem custo, mas entra na base do imposto
+      det: p.det.map(d => ({ qtd: d.qtd, preco: r2(d.preco), custo: r2(d.custo), comissao: r2(d.comissao) })), // itens: para a explicação de cada valor na tela
       lucro: r2(p.lucro), margem: p.receita ? p.lucro / p.receita : 0, lg: env[p.loja + ':' + p.id]?.lg || null, uf: env[p.loja + ':' + p.id]?.uf || null, flags: p.flags }));
     const fat = rows.reduce((t, x) => t + x.receita, 0), luc = rows.reduce((t, x) => t + x.lucro, 0);
     return { desde: w.ini, total: rows.length, faturamento: r2(fat), margemMedia: fat ? luc / fat : 0, cancelados: cur.total.canceladas, semLogistica: rows.filter(x => !x.lg).length, pedidos: rows.slice(0, 3000) };

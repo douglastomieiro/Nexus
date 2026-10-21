@@ -108,6 +108,7 @@
 
 /* revisão final: peças novas */
 .rt td.mt{color:var(--mut)}
+#ptb td[title],#ptb th[title]{cursor:help} /* lista de pedidos: valor com explicação ao passar o mouse */
 .dica{color:var(--mut);font-size:11.5px;margin:10px 0 0;line-height:1.5}.dica.warn{color:var(--warn)}
 .seg{cursor:pointer;transition:.15s}.seg:hover{box-shadow:0 6px 16px rgba(15,23,42,.08);transform:translateY(-1px)}
 .rt tr.aberto td{background:#f5f8ff}
