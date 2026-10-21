@@ -3,6 +3,8 @@
 // Tudo é derivado do que já está no banco (nada novo é coletado) e do motor de lucro (margem.js).
 import { db } from './db.js';
 import { calcular } from './margem.js';
+import { calcularShopee } from './shopee-margem.js';
+import { estoquePorSku, vendas30, shopeeDoFiltro } from './recompra.js';
 
 export const LOG = { fulfillment: 'Full', self_service: 'Flex', xd_drop_off: 'Padrão', cross_docking: 'Padrão', drop_off: 'Padrão', default: 'Padrão' };
 export const hoje = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
@@ -60,12 +62,26 @@ function sinal(x) {
   return 'Neutro / Monitorar';
 }
 
-function montaAbc(lojas, w, met) {
+// soma Mercado Livre + Shopee por SKU (em cópias: os objetos do cálculo ficam em cache)
+function juntaCanais(ml, sp) {
+  const m = new Map(ml.map(s => [s.sku, { ...s, lojas: [...s.lojas], canais: ['ML'] }]));
+  for (const s of sp) {
+    const e = m.get(s.sku);
+    if (e) { e.unidades += s.unidades; e.receita += s.receita; e.lucro += s.lucro; e.ads = (e.ads || 0) + (s.ads || 0); e.margem = e.receita ? e.lucro / e.receita : 0; e.semCusto = e.semCusto || s.semCusto; e.lojas = [...new Set([...e.lojas, ...s.lojas])]; e.canais.push('Shopee'); }
+    else m.set(s.sku, { sku: s.sku, titulo: s.titulo, item: s.item, lojas: [...s.lojas], anuncios: s.anuncios, unidades: s.unidades, receita: s.receita, lucro: s.lucro, margem: s.margem, ads: s.ads || 0, custoUnit: s.custoUnit, semCusto: s.semCusto, canais: ['Shopee'] });
+  }
+  return [...m.values()];
+}
+
+// spLojas: contas da Shopee para somar ao ML (Tabela de Produtos); vazio = só ML
+function montaAbc(lojas, w, met, spLojas = []) {
   const cur = calcular({ lojas, desde: w.ini }), prev = calcular({ lojas, desde: w.pIni, ate: w.pFim });
-  const pm = Object.fromEntries(prev.skus.map(s => [s.sku, s]));
-  const base = cur.skus.map(s => ({ sku: s.sku, titulo: s.titulo, item: s.item, lojas: s.lojas, anuncios: s.anuncios, unidades: s.unidades, receita: r2(s.receita), lucro: r2(s.lucro), margem: s.margem, ads: r2(s.ads), custoUnit: s.custoUnit, semCusto: s.semCusto,
+  const sp = spLojas.length ? { cur: calcularShopee({ lojas: spLojas, desde: w.ini }), prev: calcularShopee({ lojas: spLojas, desde: w.pIni, ate: w.pFim }) } : null;
+  const curSkus = sp ? juntaCanais(cur.skus, sp.cur.skus) : cur.skus, prevSkus = sp ? juntaCanais(prev.skus, sp.prev.skus) : prev.skus;
+  const pm = Object.fromEntries(prevSkus.map(s => [s.sku, s]));
+  const base = curSkus.map(s => ({ canais: s.canais || ['ML'], sku: s.sku, titulo: s.titulo, item: s.item, lojas: s.lojas, anuncios: s.anuncios, unidades: s.unidades, receita: r2(s.receita), lucro: r2(s.lucro), margem: s.margem, ads: r2(s.ads), custoUnit: s.custoUnit, semCusto: s.semCusto,
     thumb: thumbDe(s.lojas[0], s.item), prevReceita: r2(pm[s.sku]?.receita || 0), prevUnidades: pm[s.sku]?.unidades || 0, prevLucro: r2(pm[s.sku]?.lucro || 0), prevMargem: pm[s.sku]?.margem ?? null }));
-  const cl = classes(base, met), clp = classes(prev.skus.map(s => ({ sku: s.sku, unidades: s.unidades, receita: s.receita, lucro: s.lucro })), met);
+  const cl = classes(base, met), clp = classes(prevSkus.map(s => ({ sku: s.sku, unidades: s.unidades, receita: s.receita, lucro: s.lucro })), met);
   const ref = met === 'unidades' ? 'prevUnidades' : met === 'lucro' ? 'prevLucro' : 'prevReceita';
   const linhas = base.map(x => {
     x.cresc = x[ref] > 0 ? (x[met] - x[ref]) / x[ref] : null;
@@ -73,7 +89,7 @@ function montaAbc(lojas, w, met) {
     x.tendencia = x.cresc == null ? 'Novo' : x.cresc > 0.05 ? 'Alta' : x.cresc < -0.05 ? 'Queda' : 'Estável';
     x.sinal = sinal(x); return x;
   }).sort((a, b) => b[met] - a[met]);
-  return { cur, prev, linhas };
+  return { cur, prev, linhas, sp };
 }
 
 // saúde de um anúncio em Ads: compara o ACOS com a margem do item ANTES do Ads (se o ACOS come a margem, o Ads dá prejuízo)
@@ -109,12 +125,18 @@ export function registrar(app, { H, nomes, lojasSel, dias }) {
   // ── Curva ABC / tabela de produtos ──
   app.get('/api/abc', H(q => {
     const met = ['unidades', 'receita', 'lucro'].includes(q.metrica) ? q.metrica : 'receita', w = janela(dias(q));
-    const { cur, prev, linhas } = montaAbc(lojasSel(q), w, met);
-    const delta = (a, b) => b ? (a - b) / Math.abs(b) : null;
-    return { desde: w.ini, metrica: met, resumo: {
-      faturamento: cur.total.receita, faturamentoPrev: prev.total.receita, dFat: delta(cur.total.receita, prev.total.receita),
-      unidades: cur.skus.reduce((t, s) => t + s.unidades, 0), unidadesPrev: prev.skus.reduce((t, s) => t + s.unidades, 0),
-      lucro: cur.total.lucroFinal, lucroPrev: prev.total.lucroFinal, margem: cur.total.margem, margemPrev: prev.total.margem, cancelados: cur.total.canceladas, canceladosPrev: prev.total.canceladas }, linhas };
+    const lojas = lojasSel(q), spL = shopeeDoFiltro(lojas); // com Shopee no filtro, a tabela soma os dois canais por SKU
+    const { cur, prev, linhas, sp } = montaAbc(lojas, w, met, spL);
+    // recompra: estoque dos anúncios (próprio e Full) e vendas dos últimos 30 dias de cada SKU
+    const E = estoquePorSku(lojas, spL), V30 = vendas30(lojas, spL);
+    for (const x of linhas) { const e = E[x.sku]; x.estoqueProprio = e?.proprio || 0; x.estoqueFull = e?.full || 0; x.estoqueAnuncios = e?.anuncios || []; x.semAnuncio = !e; x.unidades30 = V30[x.sku] || 0; }
+    const delta = (a, b) => b ? (a - b) / Math.abs(b) : null, S = (c, k) => (sp ? sp[c].total[k] || 0 : 0), U = c => (sp ? sp[c].skus.reduce((t, s) => t + s.unidades, 0) : 0);
+    const fat = cur.total.receita + S('cur', 'receita'), fatP = prev.total.receita + S('prev', 'receita'), luc = cur.total.lucroFinal + S('cur', 'lucroFinal'), lucP = prev.total.lucroFinal + S('prev', 'lucroFinal');
+    return { desde: w.ini, dias: w.n, metrica: met, canais: sp ? ['ML', 'Shopee'] : ['ML'], resumo: {
+      faturamento: fat, faturamentoPrev: fatP, dFat: delta(fat, fatP),
+      unidades: cur.skus.reduce((t, s) => t + s.unidades, 0) + U('cur'), unidadesPrev: prev.skus.reduce((t, s) => t + s.unidades, 0) + U('prev'),
+      lucro: luc, lucroPrev: lucP, margem: sp ? (fat ? luc / fat : 0) : cur.total.margem, margemPrev: sp ? (fatP ? lucP / fatP : 0) : prev.total.margem,
+      cancelados: cur.total.canceladas + S('cur', 'canceladas'), canceladosPrev: prev.total.canceladas + S('prev', 'canceladas') }, linhas };
   }));
 
   // ── Análise por SKU ──

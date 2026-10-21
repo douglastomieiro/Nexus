@@ -44,7 +44,7 @@ const sect = (t, s = '') => `<div class="sect">${t} ${s ? `<small>${s}</small>` 
 const mgPill = (m, semCusto) => semCusto ? '<span class="mg x" title="Sem custo cadastrado: a margem não é confiável">s/ custo</span>' : `<span class="mg ${m >= 0.25 ? 'g' : m >= 0.15 ? 'o' : 'r'}">${pc(m, 2)}</span>`;
 const thumb = t => t ? `<img class="th" loading="lazy" src="${esc(t)}" alt="">` : `<span class="th">${svgIco('img')}</span>`;
 const LOGCOR = { Full: '#22c55e', Flex: '#f97316', 'Padrão': '#94a3b8', 'Sem dado': '#e2e8f0' };
-const lojaTxt = l => LOJAS[l] || l;
+const lojaTxt = l => LOJAS[l] || window.LOJAS_SP?.[l] || l; // contas da Shopee: o nome vem do shopee.js (versão com Shopee)
 const lojaChip = l => `<span class="mp"><i style="background:${COR[l] || '#94a3b8'}">ML</i>${esc(lojaTxt(l))}</span>`;
 const SIGCLS = { 'Campeão A': 'b', 'Alta Receita Saudável': 'g', 'Em Queda, mas Rentável': 'b', 'ATENÇÃO': 'r', 'Giro com Margem Baixa': 'a', 'Neutro / Monitorar': 'n', 'Sem custo': 'a' };
 const SAUDE = { 'Excelente': 'g', 'Atenção': 'a', 'Crítico': 'r', 'Sem gasto': 'n' };
@@ -202,41 +202,95 @@ VIEWS.pedidos = async function () {
 VIEWS.abc = async function () {
   const met = store.get('ml_abc_met') || 'receita';
   const R = await api('abc', `&metrica=${met}`), rs = R.resumo, all = R.linhas.map(x => ({ ...x, classeN: { A: 3, B: 2, C: 1 }[x.classe] }));
-  const f = { q: '', tend: '', sinal: '', classe: '', loja: '', max: 100 }, st = { k: met, d: -1 };
+  // ── recompra integrada à curva: parâmetros (salvos neste navegador) e decisão de cada produto ──
+  const RP = { cobrir: store.get('rc_cobrir') ?? 30, prazo: store.get('rc_prazo') ?? 7, seg: store.get('rc_seg') ?? 7, mgMin: store.get('rc_mgmin') ?? 10, queda: store.get('rc_queda') ?? 30 };
+  const DEC = { repor: ['Repor', 'g'], minimo: ['Repor só o mínimo', 'b'], avaliar: ['Avaliar', 'a'], nao: ['Não repor', 'n'] };
+  const d2 = v => v.toFixed(2).replace('.', ',');
+  // Repor: curva A/B vendendo, com margem e sem queda forte → compra para cobrir + prazo + segurança.
+  // Só o mínimo: curva C, ou A/B em queda forte → compra só para não faltar durante prazo + segurança. Não repor: parou, margem baixa ou curva C em queda forte. Avaliar: sem custo.
+  const decide = x => {
+    const md = x.unidades / R.dias, est = (x.estoqueProprio || 0) + (x.estoqueFull || 0), gUn = x.prevUnidades > 0 ? x.unidades / x.prevUnidades - 1 : null;
+    let dec, motivo;
+    if (!x.unidades30) [dec, motivo] = ['nao', 'Parou de vender: nenhuma venda nos últimos 30 dias.'];
+    else if (x.semCusto) [dec, motivo] = ['avaliar', 'Sem custo cadastrado: não dá para saber se vale repor. Cadastre em Custos.'];
+    else if (x.margem < RP.mgMin / 100) [dec, motivo] = ['nao', `Margem de ${pc(x.margem, 1)}, abaixo do mínimo de ${RP.mgMin}%.`];
+    else if (gUn != null && gUn < -RP.queda / 100) [dec, motivo] = x.classe === 'C' ? ['nao', `Curva C e vendas caíram ${pc(-gUn, 0)} em relação ao período anterior (limite de queda: ${RP.queda}%).`]
+      : ['minimo', `Curva ${x.classe}, mas vendas caíram ${pc(-gUn, 0)} em relação ao período anterior: compra só para não faltar durante prazo + segurança, até a venda se firmar.`];
+    else if (x.classe === 'C') [dec, motivo] = ['minimo', 'Curva C: compra só para não faltar durante o prazo do fornecedor + segurança, sem estoque extra.'];
+    else [dec, motivo] = ['repor', `Curva ${x.classe}, vendendo e com margem de ${pc(x.margem, 1)}.`];
+    const diasAlvo = dec === 'repor' ? RP.cobrir + RP.prazo + RP.seg : dec === 'minimo' ? RP.prazo + RP.seg : 0, comprar = diasAlvo ? Math.max(0, Math.ceil(md * diasAlvo - est)) : 0;
+    Object.assign(x, { md, est, gUn, cob: md > 0 ? est / md : null, dec, decMotivo: motivo, diasAlvo, comprar, valorCompra: comprar && x.custoUnit != null ? comprar * x.custoUnit : null, decN: { repor: 4, minimo: 3, avaliar: 2, nao: 1 }[dec] });
+  };
+  all.forEach(decide);
+  const estTxt = x => `Estoque nos anúncios:\n${(x.estoqueAnuncios || []).map(a => `${a.canal} ${lojaTxt(a.loja)} · ${a.anuncio}${a.variacao ? ' (' + a.variacao + ')' : ''}${a.full ? ' · Full' : ''}${a.pausado ? ' · pausado' : ''}: ${num(a.qtd)}`).join('\n') || 'nenhum anúncio ativo com este SKU'}\nPróprio = o maior fora do Full (${num(x.estoqueProprio || 0)}) · Full = soma (${num(x.estoqueFull || 0)}) · Total = ${num(x.est)}`;
+  const compTxt = x => !x.diasAlvo ? `${DEC[x.dec][0]}: ${x.decMotivo}` : `Comprar = média ${d2(x.md)} por dia × ${x.diasAlvo} dias (${x.dec === 'repor' ? `cobrir ${RP.cobrir} + prazo ${RP.prazo} + segurança ${RP.seg}` : `prazo ${RP.prazo} + segurança ${RP.seg}`}) − estoque ${num(x.est)}\n= ${(x.md * x.diasAlvo).toFixed(1).replace('.', ',')} − ${num(x.est)} → ${num(x.comprar)} un.${x.valorCompra ? `\nCusto: ${num(x.comprar)} × ${brl(x.custoUnit)} = ${brl(x.valorCompra)}` : ''}`;
+  const tdRec = x => `<td class="n" title="${esc(estTxt(x))}">${num(x.est)}${x.estoqueFull ? `<br><small style="color:var(--mut)">${num(x.estoqueFull)} no Full</small>` : ''}</td>
+      <td class="n" title="${esc(x.cob == null ? 'Sem venda no período' : `Estoque ${num(x.est)} ÷ ${d2(x.md)} vendas por dia = ${Math.floor(x.cob)} dias até acabar`)}">${x.cob == null ? '—' : x.cob > 999 ? '999+ d' : Math.floor(x.cob) + ' d'}</td>
+      <td class="n" title="${esc(compTxt(x))}"><b>${x.comprar ? num(x.comprar) : '—'}</b>${x.valorCompra ? `<br><small style="color:var(--mut)">${brl(x.valorCompra)}</small>` : ''}</td>
+      <td class="c" title="${esc(x.decMotivo)}"><span class="sg ${DEC[x.dec][1]}">${DEC[x.dec][0]}</span></td>`;
+  const resumoRecompra = () => {
+    const L = all.filter(x => x.comprar > 0), semC = all.filter(x => x.dec === 'avaliar').length;
+    $('#arpR').textContent = `· ${num(L.length)} produto(s) para comprar · ${num(L.reduce((t, x) => t + x.comprar, 0))} un. · ${brl(L.reduce((t, x) => t + (x.valorCompra || 0), 0))}${semC ? ` · ${num(semC)} para avaliar (sem custo)` : ''}`;
+  };
+  const f = { q: '', tend: '', sinal: '', classe: '', loja: '', dec: '', max: 100 }, st = { k: met, d: -1 };
   $('#view').innerHTML = `<div class="kgrid">${kpi('Faturamento', brl(rs.faturamento), `${dlt(rs.dFat)} vs período anterior`, 'lucro', 'blue')}${kpi('Quantidade', num(rs.unidades), `${dlt(dv(rs.unidades, rs.unidadesPrev))} unidades`, 'itens', 'purple')}${kpi('Margem média', pc(rs.margem, 2), `${dpp(rs.margem, rs.margemPrev)} vs anterior`, 'promocoes', 'amber')}${kpi('Lucro R$', brl(rs.lucro), `${dlt(dv(rs.lucro, rs.lucroPrev))} vs anterior`, 'lucro', 'green')}${kpi('Cancelados', num(rs.cancelados), `anterior ${num(rs.canceladosPrev)}`, 'cancel', 'red')}</div>
-    <div class="flt" style="margin-top:0"><div class="boxh" style="margin-bottom:8px"><h4 style="margin:0">${ic('abc', 13)} Tabela de Produtos <small style="font-weight:400">· ${num(all.length)} produtos desde ${R.desde.split('-').reverse().join('/')}</small></h4><button class="btn2" id="ax">${ic('down', 13)}Excel</button></div><div class="fgrid">
+    <div class="flt" style="margin-top:0"><div class="boxh" style="margin-bottom:8px"><h4 style="margin:0">${ic('abc', 13)} Tabela de Produtos <small style="font-weight:400">· ${num(all.length)} produtos desde ${R.desde.split('-').reverse().join('/')}</small></h4><span style="display:flex;gap:6px"><button class="btn2" id="alc" title="Planilha só com o que comprar (Repor e Repor só o mínimo), com quantidade e custo">${ic('down', 13)}Lista de compra</button><button class="btn2" id="ax">${ic('down', 13)}Excel</button></span></div><div class="fgrid">
       <label>Métrica ABC<select id="am"><option value="unidades">Unidades</option><option value="receita">Faturamento (R$)</option><option value="lucro">Lucro (R$)</option></select></label>
       <label style="min-width:220px;flex:1">SKU / Nome<input id="aq" placeholder="Ex.: 789… ou nome do produto"></label>
       <label>Tendência<select id="at"><option value="">Todas</option><option>Alta</option><option>Estável</option><option>Queda</option><option>Novo</option></select></label>
       <label>Sinal<select id="as"><option value="">Todos</option>${[...new Set(all.map(x => x.sinal))].sort().map(s => `<option>${esc(s)}</option>`).join('')}</select></label>
       <label>Classe<select id="ac"><option value="">Todas</option><option>A</option><option>B</option><option>C</option></select></label>
-      <label>Conta<select id="al"><option value="">Todas</option>${Object.entries(LOJAS).map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join('')}</select></label></div></div>
+      <label>Conta<select id="al"><option value="">Todas</option>${Object.entries(LOJAS).map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join('')}</select></label>
+      <label>Decisão<select id="ad"><option value="">Todas</option><option value="comprar">Precisa comprar agora</option><option value="repor">Repor</option><option value="minimo">Repor só o mínimo</option><option value="avaliar">Avaliar</option><option value="nao">Não repor</option></select></label></div></div>
+    <details class="flt" id="arp" style="margin-top:0"${store.get('rc_aberto') === false ? '' : ' open'}><summary style="cursor:pointer;font-weight:600">${ic('itens', 13)} Recompra <small id="arpR" style="font-weight:400;color:var(--mut)"></small></summary>
+      <div class="fgrid" style="margin-top:8px">
+        <label title="Quantos dias de venda a compra deve cobrir depois que chegar (produtos em Repor)">Cobrir (dias)<input id="rpC" inputmode="numeric" value="${RP.cobrir}"></label>
+        <label title="Quantos dias o fornecedor leva para entregar">Prazo do fornecedor (dias)<input id="rpP" inputmode="numeric" value="${RP.prazo}"></label>
+        <label title="Folga para atraso ou venda acima da média">Segurança (dias)<input id="rpS" inputmode="numeric" value="${RP.seg}"></label>
+        <label title="Abaixo desta margem o produto fica em Não repor">Margem mínima (%)<input id="rpM" inputmode="decimal" value="${RP.mgMin}"></label>
+        <label title="Vendas (unidades) caindo mais que isto em relação ao período anterior = Não repor">Queda forte acima de (%)<input id="rpQ" inputmode="numeric" value="${RP.queda}"></label></div>
+      <p class="dica" style="margin:8px 0 0"><b>Repor</b>: curva A ou B, vendendo nos últimos 30 dias, margem acima do mínimo e sem queda forte → compra para cobrir + prazo + segurança.
+        <b>Repor só o mínimo</b>: curva C, ou curva A/B em queda forte → só o necessário para não faltar durante prazo + segurança. <b>Não repor</b>: parou de vender, margem abaixo do mínimo ou curva C em queda forte. <b>Avaliar</b>: sem custo cadastrado.
+        Média de venda = unidades do período (${R.dias} dias, troque no Período, no topo) ÷ ${R.dias}.${R.canais?.includes('Shopee') ? ' Vendas e estoque somam Mercado Livre e Shopee.' : ''}
+        ${met !== 'lucro' ? '<br><b>Dica</b>: para recompra, use <b>Métrica ABC = Lucro</b>: assim um produto que vende muito mas dá pouco lucro não vira prioridade. <a href="#" id="arpL" class="lk">Usar lucro</a>' : ''}</p></details>
     <div class="box"><div class="boxh"><h3>Curva ABC de Produtos <small id="an"></small></h3><small>Clique em qualquer linha para ver detalhes, variações e dados de Ads</small></div><div class="tw" style="max-height:none"><table class="rt" id="atb"><thead></thead><tbody id="ab"></tbody></table></div><div class="pg"><button id="am2">Mostrar mais</button></div></div>`;
   $('#am').value = met;
-  const filtra = () => all.filter(x => (!f.q || (x.titulo + ' ' + x.sku).toLowerCase().includes(f.q)) && (!f.tend || x.tendencia === f.tend) && (!f.sinal || x.sinal === f.sinal) && (!f.classe || x.classe === f.classe) && (!f.loja || x.lojas.includes(f.loja)));
+  const filtra = () => all.filter(x => (!f.q || (x.titulo + ' ' + x.sku).toLowerCase().includes(f.q)) && (!f.tend || x.tendencia === f.tend) && (!f.sinal || x.sinal === f.sinal) && (!f.classe || x.classe === f.classe) && (!f.loja || x.lojas.includes(f.loja)) && (!f.dec || (f.dec === 'comprar' ? x.comprar > 0 : x.dec === f.dec)));
   let cur = [];
   const draw = () => {
-    cur = ordena(filtra(), st); $('#an').textContent = `(${num(cur.length)})`;
-    $('#atb thead').innerHTML = `<tr><th>Produto</th>${thS('Faturamento', 'receita', st, 'n')}${thS('Unid.', 'unidades', st, 'n')}${thS('Lucro R$', 'lucro', st, 'n')}${thS('Margem', 'margem', st, 'c')}${thS('Classe', 'classeN', st, 'c')}<th>Sinal</th><th></th></tr>`;
+    cur = ordena(filtra(), st); $('#an').textContent = `(${num(cur.length)})`; resumoRecompra();
+    $('#atb thead').innerHTML = `<tr><th>Produto</th>${thS('Faturamento', 'receita', st, 'n')}${thS('Unid.', 'unidades', st, 'n')}${thS('Lucro R$', 'lucro', st, 'n')}${thS('Margem', 'margem', st, 'c')}${thS('Classe', 'classeN', st, 'c')}${thS('Estoque', 'est', st, 'n')}${thS('Cobertura', 'cob', st, 'n')}${thS('Comprar', 'comprar', st, 'n')}${thS('Decisão', 'decN', st, 'c')}<th>Sinal</th><th></th></tr>`;
     ligaSort('#atb', st, draw);
     $('#ab').innerHTML = cur.slice(0, f.max).map((x, i) => `<tr class="lin" data-i="${i}" style="cursor:pointer"><td><div class="pr">${thumb(x.thumb)}<div><b title="${esc(x.titulo)}">${esc(x.titulo)}</b><small>${esc(x.sku)}${x.anuncios > 1 ? ` · ${x.anuncios} anúncios` : ''} · ${x.lojas.map(lojaTxt).join(' + ')}</small></div></div></td>
       <td class="n"><b>${brl(x.receita)}</b><br>${x.cresc == null ? '<small style="color:var(--mut)">novo</small>' : dlt(x.cresc)}</td><td class="n">${num(x.unidades)}</td><td class="n"><b class="${x.lucro < 0 ? 'bad' : 'ok'}">${brl(x.lucro)}</b></td><td class="c">${mgPill(x.margem, x.semCusto)}</td>
-      <td class="c"><span class="cls" title="classe no período anterior → atual"><b class="${x.classePrev}">${x.classePrev}</b>→<b class="${x.classe}">${x.classe}</b></span></td><td><span class="sg ${SIGCLS[x.sinal] || 'n'}">${esc(x.sinal)}</span></td><td class="chev">${ic('chev', 16)}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">Nenhum produto com esses filtros.</td></tr>';
+      <td class="c"><span class="cls" title="classe no período anterior → atual"><b class="${x.classePrev}">${x.classePrev}</b>→<b class="${x.classe}">${x.classe}</b></span></td>${tdRec(x)}<td><span class="sg ${SIGCLS[x.sinal] || 'n'}">${esc(x.sinal)}</span></td><td class="chev">${ic('chev', 16)}</td></tr>`).join('') || '<tr><td colspan="12" class="empty">Nenhum produto com esses filtros.</td></tr>';
     $('#am2').style.display = cur.length > f.max ? '' : 'none';
     document.querySelectorAll('#ab tr.lin').forEach(tr => tr.onclick = () => {
       const nx = tr.nextElementSibling; if (nx?.classList.contains('xp')) { nx.remove(); tr.classList.remove('aberto'); return; }
       const x = cur[+tr.dataset.i], pAds = x.receita ? x.ads / x.receita : 0; tr.classList.add('aberto');
-      tr.insertAdjacentHTML('afterend', `<tr class="xp"><td colspan="8"><div class="xg">
+      tr.insertAdjacentHTML('afterend', `<tr class="xp"><td colspan="12"><div class="xg">
         <div class="xb"><h5>Vendas e comportamento</h5><div class="xl"><span>Unidades vendidas</span><b>${num(x.unidades)}</b></div><div class="xl"><span>Var. unidades</span><b>${x.prevUnidades ? dlt(dv(x.unidades, x.prevUnidades)) : '—'}</b></div><div class="xl"><span>Margem</span><b>${x.semCusto ? '—' : pc(x.margem, 2)}</b></div><div class="xl"><span>Var. margem</span><b>${x.semCusto || x.prevMargem == null ? '—' : dpp(x.margem, x.prevMargem)}</b></div><div class="xl"><span>Preço médio</span><b>${brl(x.unidades ? x.receita / x.unidades : 0)}</b></div><div class="xl"><span>% acumulado ABC</span><b>${pc(x.pctAcum)}</b></div></div>
         <div class="xb"><h5>Publicidade (Ads)</h5><div class="xl"><span>Gasto com Ads</span><b>${brl(x.ads)}</b></div><div class="xl"><span>% do faturamento</span><b>${pc(pAds)}</b></div><div class="xl"><span>Lucro pós Ads</span><b>${brl(x.lucro)}</b></div><div class="xl"><span>Custo unitário</span><b>${x.custoUnit == null ? '<span class="warn">sem custo</span>' : brl(x.custoUnit)}</b></div></div>
+        <div class="xb"><h5>Recompra</h5><div class="xl"><span>Decisão</span><b>${DEC[x.dec][0]}</b></div><div class="xl"><span>Por quê</span><b style="white-space:normal;text-align:right">${esc(x.decMotivo)}</b></div><div class="xl"><span>Média de venda</span><b>${d2(x.md)} por dia</b></div><div class="xl"><span>Últimos 30 dias</span><b>${num(x.unidades30)} un.</b></div><div class="xl"><span>Estoque (próprio + Full)</span><b>${num(x.estoqueProprio || 0)} + ${num(x.estoqueFull || 0)}</b></div><div class="xl"><span>Comprar</span><b>${x.comprar ? num(x.comprar) + ' un.' + (x.valorCompra ? ' · ' + brl(x.valorCompra) : '') : '—'}</b></div></div>
         <div class="xa"><a class="btn-ref" href="#sku:${encodeURIComponent(x.sku)}" style="text-decoration:none;justify-content:center;border-radius:8px;padding:8px 12px;background:var(--ac);color:#fff;font-weight:600;font-size:12.5px">${ic('sku', 13)} Analisar SKU</a><button class="btn2" data-a="sku">${ic('copy', 13)}Copiar SKU</button><a class="btn2" href="#custos" style="text-decoration:none">${ic('custos', 13)}Editar custo</a><a class="btn2" target="_blank" rel="noopener" href="${mlUrl('item', x.item)}" style="text-decoration:none">${ic('ext', 13)}Abrir no ML</a></div></div></td></tr>`);
       tr.nextElementSibling.querySelector('[data-a=sku]').onclick = e => { navigator.clipboard?.writeText(x.sku); e.currentTarget.innerHTML = ic('copy', 13) + 'Copiado ✓'; };
     });
   };
-  const ler = () => { f.q = $('#aq').value.toLowerCase().trim(); f.tend = $('#at').value; f.sinal = $('#as').value; f.classe = $('#ac').value; f.loja = $('#al').value; f.max = 100; draw(); };
-  ['#at', '#as', '#ac', '#al'].forEach(i => $(i).onchange = ler); $('#aq').oninput = debounce(ler, 250);
+  const ler = () => { f.q = $('#aq').value.toLowerCase().trim(); f.tend = $('#at').value; f.sinal = $('#as').value; f.classe = $('#ac').value; f.loja = $('#al').value; f.dec = $('#ad').value; f.max = 100; draw(); };
+  ['#at', '#as', '#ac', '#al', '#ad'].forEach(i => $(i).onchange = ler); $('#aq').oninput = debounce(ler, 250);
   $('#am').onchange = () => { store.set('ml_abc_met', $('#am').value); go(); }; $('#am2').onclick = () => { f.max += 100; draw(); };
-  $('#ax').onclick = () => csv('tabela-de-produtos.csv', [['SKU', x => x.sku], ['Produto', x => x.titulo], ['Faturamento', x => num2(x.receita)], ['Var. %', x => x.cresc == null ? '' : num2(x.cresc * 100)], ['Unidades', x => x.unidades], ['Lucro', x => num2(x.lucro)], ['Margem %', x => x.semCusto ? '' : num2(x.margem * 100)], ['Classe', x => x.classe], ['Classe anterior', x => x.classePrev], ['Sinal', x => x.sinal], ['Ads', x => num2(x.ads)], ['Custo unitário', x => x.custoUnit == null ? '' : num2(x.custoUnit)]], cur);
+  $('#ax').onclick = () => csv('tabela-de-produtos.csv', [['SKU', x => x.sku], ['Produto', x => x.titulo], ['Faturamento', x => num2(x.receita)], ['Var. %', x => x.cresc == null ? '' : num2(x.cresc * 100)], ['Unidades', x => x.unidades], ['Lucro', x => num2(x.lucro)], ['Margem %', x => x.semCusto ? '' : num2(x.margem * 100)], ['Classe', x => x.classe], ['Classe anterior', x => x.classePrev], ['Sinal', x => x.sinal], ['Ads', x => num2(x.ads)], ['Custo unitário', x => x.custoUnit == null ? '' : num2(x.custoUnit)],
+    ['Estoque próprio', x => x.estoqueProprio || 0], ['Full', x => x.estoqueFull || 0], ['Cobertura (dias)', x => (x.cob == null ? '' : Math.floor(x.cob))], ['Comprar (un.)', x => x.comprar], ['Decisão', x => DEC[x.dec][0]], ['Motivo', x => x.decMotivo]], cur);
+  // lista de compra: só o que comprar (Repor e Repor só o mínimo), do mais urgente (menor cobertura) para o menos
+  $('#alc').onclick = () => csv(`lista-de-compra-${R.desde}.csv`, [['SKU', x => x.sku], ['Produto', x => x.titulo], ['Canais', x => (x.canais || ['ML']).join(' + ')], ['Curva', x => x.classe], ['Decisão', x => DEC[x.dec][0]],
+    [`Vendidos (${R.dias} dias)`, x => x.unidades], ['Média/dia', x => num2(x.md)], ['Últimos 30 dias (un.)', x => x.unidades30], ['Estoque próprio', x => x.estoqueProprio || 0], ['Full', x => x.estoqueFull || 0],
+    ['Cobertura (dias)', x => (x.cob == null ? '' : Math.floor(x.cob))], ['Comprar (un.)', x => x.comprar], ['Custo unitário', x => (x.custoUnit == null ? '' : num2(x.custoUnit))], ['Custo da compra', x => (x.valorCompra == null ? '' : num2(x.valorCompra))]],
+    all.filter(x => x.comprar > 0).sort((a, b) => (a.cob ?? 0) - (b.cob ?? 0)));
+  // parâmetros da recompra: inteiros de 0 a 365 (margem até 100), guardados neste navegador; recalcula sem buscar de novo
+  const lerRP = () => { for (const [id, k, max] of [['#rpC', 'cobrir', 365], ['#rpP', 'prazo', 365], ['#rpS', 'seg', 365], ['#rpM', 'mgMin', 100], ['#rpQ', 'queda', 100]]) { const v = parseNum($(id).value); if (Number.isFinite(v) && v >= 0 && v <= max) { RP[k] = v; store.set('rc_' + k.toLowerCase(), v); } } all.forEach(decide); draw(); };
+  ['#rpC', '#rpP', '#rpS', '#rpM', '#rpQ'].forEach(i => $(i).oninput = debounce(lerRP, 350));
+  $('#arp').ontoggle = () => store.set('rc_aberto', $('#arp').open);
+  $('#arpL')?.addEventListener('click', e => { e.preventDefault(); store.set('ml_abc_met', 'lucro'); go(); });
   draw();
 };
 

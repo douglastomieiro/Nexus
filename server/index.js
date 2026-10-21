@@ -13,7 +13,6 @@ import { registrar as registrarPainel } from './painel.js';
 import { registrar as registrarMetrics } from './metrics.js';
 import { registrarFixos, fixosPorMes } from './custos-fixos.js';
 import { registrarFechamentos } from './dre-fechamentos.js';
-import { recompra } from './recompra.js';
 import { registrarDescontos } from './descontos/rotas.js';
 import { registrarShopee, alertasShopee } from './shopee-rotas.js';
 import { registrarContas } from './contas-rotas.js';
@@ -223,7 +222,6 @@ app.get('/api/dre', H(q => {
 }));
 registrarFixos(app, { H, nomes }); // Financeiro (DRE) › custos fixos do negócio
 registrarFechamentos(app, { H }); // Financeiro (DRE) › fechamento mensal
-app.get('/api/recompra', H(q => recompra({ lojas: lojasSel(q), dias: dias(q) }))); // Gestão de Produtos › Recompra
 app.get('/api/config', H(() => ({ ...getConfig(), auto: Object.fromEntries(Object.keys(nomes).map(l => { const a = aliquotaAuto(l); return [l, a && { cnpj: a.cnpj, nome: a.nome, anexo: a.anexo, meses: Object.entries(a.meses).slice(-6).map(([mes, v]) => ({ mes, ...v })) }]; })) })));
 app.post('/api/config', H((_, req) => { for (const k of [...Object.keys(nomes).map(l => 'aliquota_' + l), 'devolucao_perde_produto']) if (req.body[k] != null) {
     const v = Number(req.body[k]); if (!Number.isFinite(v) || v < 0 || v > 100) throw Object.assign(new Error(`valor inválido para ${k}`), { status: 400 });

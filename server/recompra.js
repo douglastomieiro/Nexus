@@ -1,14 +1,16 @@
-// Gestão de Produtos › Recompra: por SKU, vendas do período (Mercado Livre + Shopee), estoque dos anúncios e o que comprar.
+// Recompra (Gestão de Produtos › Tabela de Produtos): estoque dos anúncios e vendas dos últimos 30 dias por SKU, somando Mercado Livre e Shopee.
 // Estoque próprio: anúncios do mesmo SKU fora do Full mostram o mesmo estoque físico (o seu depósito) → conta o MAIOR deles, não a soma.
 // Full: estoque guardado no depósito do Mercado Livre, separado por anúncio → soma.
 // O anúncio do ML não traz o SKU de cada variação: ele vem dos pedidos (anúncio + variação → seller_sku).
-// A sugestão de compra (dias de cobertura, prazo do fornecedor, segurança) é calculada na tela, que tem esses campos.
+// A decisão (repor / só o mínimo / não repor) e a quantidade são calculadas na tela, que tem os parâmetros.
 import { db } from './db.js';
-import { listarSkus, skuDe, getCustos } from './margem.js';
+import { listarSkus, skuDe } from './margem.js';
 import { calcularShopee } from './shopee-margem.js';
 import { SHOPEE } from './shopee.js';
 
-const r2 = n => Math.round(n * 100) / 100;
+// contas da Shopee da mesma empresa das contas do ML do filtro (shopee<n> ↔ loja<n>)
+export const shopeeDoFiltro = lojas => Object.keys(SHOPEE).filter(k => lojas.includes('loja' + SHOPEE[k].n));
+
 const cacheVar = { t: 0, v: null };
 // `${loja}:${anúncio}:${variação}` → SKU vendido (guardado por 10 min: varre os pedidos)
 function skuDaVariacao() {
@@ -21,9 +23,9 @@ function skuDaVariacao() {
   return m;
 }
 
-// estoque de cada anúncio (ou variação/modelo) ativo ou pausado, com o SKU dele
-function estoques(lojas, spLojas, add) {
-  const varSku = skuDaVariacao();
+// { sku: { proprio, full, anuncios: [{ canal, loja, anuncio, variacao, qtd, full, pausado }] } } — anúncios ativos ou pausados
+export function estoquePorSku(lojas, spLojas) {
+  const E = {}, add = (sku, a) => (E[sku] ||= []).push(a), varSku = skuDaVariacao();
   for (const r of db.prepare(`SELECT loja, chave, body FROM raw WHERE recurso='item' AND status=200 AND loja IN (${lojas.map(() => '?').join(',')})`).all(...lojas)) {
     const b = JSON.parse(r.body);
     if (b.status !== 'active' && b.status !== 'paused') continue;
@@ -34,8 +36,7 @@ function estoques(lojas, spLojas, add) {
       if (sku) add(sku, { ...base, variacao: (v.attribute_combinations || []).map(a => a.value_name).join(' / '), qtd: v.available_quantity || 0 });
     }
   }
-  if (!spLojas.length) return;
-  for (const r of db.prepare(`SELECT loja, chave, body FROM raw WHERE recurso='sp_item' AND status=200 AND loja IN (${spLojas.map(() => '?').join(',')})`).all(...spLojas)) {
+  if (spLojas.length) for (const r of db.prepare(`SELECT loja, body FROM raw WHERE recurso='sp_item' AND status=200 AND loja IN (${spLojas.map(() => '?').join(',')})`).all(...spLojas)) {
     const b = JSON.parse(r.body);
     if (b.item_status !== 'NORMAL' && b.item_status !== 'UNLIST') continue;
     const base = { canal: 'Shopee', loja: r.loja, anuncio: String(b.item_id), full: !!b.is_fulfillment_by_shopee, pausado: b.item_status === 'UNLIST' };
@@ -44,31 +45,15 @@ function estoques(lojas, spLojas, add) {
       add(sku, { ...base, variacao: m.model_name || '', qtd: m.stock_info_v2?.summary_info?.total_available_stock ?? 0 });
     }
   }
+  return Object.fromEntries(Object.entries(E).map(([sku, an]) => [sku, {
+    proprio: Math.max(0, ...an.filter(a => !a.full).map(a => a.qtd)), full: an.filter(a => a.full).reduce((t, a) => t + a.qtd, 0), anuncios: an.slice(0, 12),
+  }]));
 }
 
-export function recompra({ lojas, dias }) {
-  const agora = Date.now() - 3 * 3600e3, desde = n => new Date(agora - (n - 1) * 864e5).toISOString().slice(0, 10);
-  const spLojas = Object.keys(SHOPEE).filter(k => lojas.includes('loja' + SHOPEE[k].n)); // Shopee da mesma empresa das contas do filtro
-  const custos = getCustos(), P = {};
-  const linha = (sku, titulo) => (P[sku] ||= { sku, titulo, variacao: '', canais: new Set(), unidades: 0, receita: 0, unidades30: 0 });
-  for (const s of listarSkus(lojas, desde(dias))) { const p = linha(s.sku, s.titulo); p.unidades += s.unidades; p.receita += s.receita; p.variacao ||= s.variacao || ''; p.canais.add('ML'); }
-  for (const s of listarSkus(lojas, desde(30))) linha(s.sku, s.titulo).unidades30 += s.unidades;
-  if (spLojas.length) {
-    for (const s of calcularShopee({ lojas: spLojas, desde: desde(dias) }).skus) { const p = linha(s.sku, s.titulo); p.unidades += s.unidades; p.receita += s.receita; p.variacao ||= s.variacao || ''; p.canais.add('Shopee'); }
-    for (const s of calcularShopee({ lojas: spLojas, desde: desde(30) }).skus) linha(s.sku, s.titulo).unidades30 += s.unidades;
-  }
-  const E = {};
-  estoques(lojas, spLojas, (sku, a) => (E[sku] ||= []).push(a));
-  // curva ABC pelo faturamento do período: A = até 80% do faturamento, B = até 95%, C = o resto
-  const L = Object.values(P).filter(p => p.unidades > 0 || p.unidades30 > 0).sort((a, b) => b.receita - a.receita);
-  const tot = L.reduce((t, p) => t + p.receita, 0); let ac = 0;
-  return {
-    dias,
-    linhas: L.map(p => {
-      ac += p.receita; const an = E[p.sku] || [];
-      return { sku: p.sku, titulo: p.titulo, variacao: p.variacao, canais: [...p.canais], unidades: p.unidades, receita: r2(p.receita), unidades30: p.unidades30,
-        estoqueProprio: Math.max(0, ...an.filter(a => !a.full).map(a => a.qtd)), estoqueFull: an.filter(a => a.full).reduce((t, a) => t + a.qtd, 0),
-        anuncios: an.slice(0, 12), semAnuncio: !an.length, custo: custos[p.sku] ?? null, classe: !tot || ac - p.receita < tot * 0.8 ? 'A' : ac - p.receita < tot * 0.95 ? 'B' : 'C' };
-    }),
-  };
+// { sku: unidades vendidas nos últimos 30 dias } (ML + Shopee)
+export function vendas30(lojas, spLojas) {
+  const desde = new Date(Date.now() - 3 * 3600e3 - 29 * 864e5).toISOString().slice(0, 10), V = {};
+  for (const s of listarSkus(lojas, desde)) V[s.sku] = (V[s.sku] || 0) + s.unidades;
+  if (spLojas.length) for (const s of calcularShopee({ lojas: spLojas, desde }).skus) V[s.sku] = (V[s.sku] || 0) + s.unidades;
+  return V;
 }
