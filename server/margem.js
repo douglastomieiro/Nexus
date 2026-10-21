@@ -62,7 +62,7 @@ export const setCusto = (sku, custo, desde) => {
 // SKU do item vendido: o do pedido; se o pedido veio sem, o atributo SELLER_SKU / campo do vendedor do anúncio; senão o próprio id do anúncio.
 // Assim um custo digitado vale para TODOS os anúncios (e lojas) com o mesmo SKU.
 let skuAnuncio = null, skuAnuncioT = 0;
-const skuDe = (loja, item) => {
+export const skuDe = (loja, item) => {
   const sku = item.seller_sku && String(item.seller_sku).trim();
   if (sku) return sku;
   if (!skuAnuncio || Date.now() - skuAnuncioT > 5 * 60e3) {
