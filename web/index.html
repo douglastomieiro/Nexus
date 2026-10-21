@@ -79,6 +79,9 @@ main{flex:1;padding:18px 26px 40px;min-width:0}
 #tdre td{padding:8px 12px;border-bottom:1px solid #eef1f6;white-space:nowrap}
 #tdre td.lb,#tdre th:first-child{position:sticky;left:0;background:#fff;z-index:1;min-width:250px;font-weight:500;border-right:1px solid var(--bd)}
 #tdre.cmp td{padding:8px 6px}#tdre.cmp th{padding:10px 6px}#tdre.cmp td.lb,#tdre.cmp th:first-child{min-width:200px;max-width:220px;white-space:normal} /* DRE compacto: muitos meses */
+/* DRE › Imprimir / PDF: só a caixa do DRE, sem menu, filtros e o resto da tela */
+.so-imp{display:none}
+@media print{body.imp-dre nav,body.imp-dre .ph,body.imp-dre .tabs,body.imp-dre .flt,body.imp-dre #view>:not(.dre-imp){display:none!important}body.imp-dre main{margin:0!important;padding:0!important}body.imp-dre .tw{max-height:none!important;overflow:visible!important}body.imp-dre .dre-imp{border:0!important;box-shadow:none!important}body.imp-dre .dre-imp button{display:none!important}body.imp-dre .so-imp{display:block}body.imp-dre #tdre{font-size:10px}@page{size:landscape;margin:10mm}}
 #tdre th:first-child{background:#0f172a;z-index:3;border-right:0}
 #tdre tr.sec td{background:#0f172a;color:#fff;font-weight:700;font-size:10.5px;letter-spacing:.08em;padding:7px 12px;position:static}
 #tdre tr.sub td{background:#eef4ff;font-weight:700;color:#1e3a8a}#tdre tr.sub td.lb{background:#eef4ff}

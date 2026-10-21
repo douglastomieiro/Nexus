@@ -3,7 +3,7 @@
 // Funciona sozinho: observa a página e prepara cada <table> que aparece (cabeçalho de uma linha só, sem colspan).
 // Linhas com outra quantidade de células (seções do DRE, "nenhum resultado") ficam como estão.
 (() => {
-  const PREFIXO = 'colunas:', MARCAS = /[▲▼⇅↑↓ⓘ⚠]/g;
+  const PREFIXO = 'colunas:', MARCAS = /[▲▼⇅↑↓ⓘ⚠]|🔒/g;
   const ler = k => { try { return JSON.parse(localStorage.getItem(PREFIXO + k)); } catch { return null; } };
   const gravar = (k, v) => { try { v ? localStorage.setItem(PREFIXO + k, JSON.stringify(v)) : localStorage.removeItem(PREFIXO + k); } catch { /* navegador sem armazenamento */ } };
   const css = document.createElement('style');

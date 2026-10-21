@@ -2,7 +2,7 @@
 //   escrow_amount = o que a Shopee repassa ao vendedor (já sem comissão, taxa de serviço, frete líquido, estornos de devolução…)
 //   lucro = escrow − imposto − custo do produto  (receita − devolução − comissão − frete − ajustes = escrow, sempre fecha)
 import { db } from './db.js';
-import { getConfig, getCustos, getCustosHist, custoNoDia, aliquotaPctFn } from './margem.js';
+import { getConfig, getCustos, getCustosHist, custoNoDia, aliquotaPctFn, versaoDados } from './margem.js';
 
 const mlDe = l => 'loja' + l.replace('shopee', '');        // conta Shopee → conta ML da mesma empresa (alíquota do Simples)
 const r2 = n => Math.round(n * 100) / 100;
@@ -13,7 +13,7 @@ const cache = new Map();
 const skuDe = i => String(i.model_sku || '').trim() || String(i.item_sku || '').trim() || String(i.item_id);
 
 export function calcularShopee({ lojas, desde, ate = '9999' }) {
-  const key = JSON.stringify([lojas, desde, ate]), hit = cache.get(key);
+  const key = JSON.stringify([lojas, desde, ate, versaoDados]), hit = cache.get(key); // versaoDados: custo/config salvo = recalcula
   if (hit && Date.now() - hit.t < 30e3) return hit.v;
   const cfg = getConfig(), custos = getCustos(), histCusto = getCustosHist();
   const cEm = (k, d) => custoNoDia(histCusto, custos, k, d); // custo em vigor no dia do pedido

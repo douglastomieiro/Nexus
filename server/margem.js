@@ -31,7 +31,7 @@ export const getConfig = () => {
   const c = Object.fromEntries(db.prepare('SELECT chave, valor FROM config').all().map(r => [r.chave, r.valor]));
   return { ...Object.fromEntries(Object.keys(LOJAS).map(l => ['aliquota_' + l, Number(c['aliquota_' + l] ?? 0)])), devolucao_perde_produto: Number(c.devolucao_perde_produto ?? 0), aliquota_modo: 'manual' };
 };
-export const setConfig = (k, v) => { db.prepare('INSERT INTO config (chave,valor) VALUES (?,?) ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor').run(k, String(v)); cache.clear(); agendarBackup('config ' + k); };
+export const setConfig = (k, v) => { db.prepare('INSERT INTO config (chave,valor) VALUES (?,?) ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor').run(k, String(v)); cache.clear(); versaoDados++; agendarBackup('config ' + k); };
 // custo de hoje de cada SKU (o em vigor no histórico; sem histórico, o da tabela custos)
 export const getCustos = () => Object.fromEntries(db.prepare(`SELECT c.sku, COALESCE((SELECT h.custo FROM custos_hist h WHERE h.sku=c.sku AND h.desde<=? ORDER BY h.desde DESC LIMIT 1), c.custo) custo FROM custos c`).all(hojeBR()).map(r => [r.sku, r.custo]));
 // histórico de vigência: { sku: [[desde, custo], ...] } em ordem de data
@@ -55,7 +55,7 @@ export const setCusto = (sku, custo, desde) => {
     const vig = db.prepare('SELECT custo FROM custos_hist WHERE sku=? AND desde<=? ORDER BY desde DESC LIMIT 1').get(sku, hojeBR()) ?? { custo: Number(custo) };
     db.prepare('INSERT INTO custos (sku,custo,atualizado_em) VALUES (?,?,?) ON CONFLICT(sku) DO UPDATE SET custo=excluded.custo, atualizado_em=excluded.atualizado_em').run(sku, vig.custo, agora);
   }
-  cache.clear(); agendarBackup("custo " + sku);
+  cache.clear(); versaoDados++; agendarBackup("custo " + sku);
 };
 
 
@@ -87,6 +87,8 @@ export function aliquotaPctFn(loja) {
 }
 
 const cache = new Map();
+// muda a cada custo ou configuração salvos: o cálculo da Shopee (outro módulo, com cache próprio) usa no nome do cache
+export let versaoDados = 0;
 // O ML devolve datas com offset -04:00; o dia comercial é o de Brasília (UTC-3).
 const dia = s => new Date(Date.parse(s) - 3 * 3600e3).toISOString().slice(0, 10);
 const r2 = n => Math.round(n * 100) / 100;

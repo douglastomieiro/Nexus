@@ -53,7 +53,7 @@ function avisosDoMes(x, d, { ml = true, shopee = true } = {}) {
 // total: false tira a coluna Total (DRE de um mês só, com o anterior ao lado)
 // x.sp = mês da Shopee (só quando o servidor manda; a versão pública não manda): o DRE ganha a seção SHOPEE e o resultado soma os dois canais
 //   (x.finalML = lucro do ML, x.final = ML + Shopee, x.receitaTotal / x.pedidosTotal = os dois canais)
-function dreTabela(linhas, cats = [], { total = true } = {}) {
+function dreTabela(linhas, cats = [], { total = true, csv = false } = {}) {
   const L = linhas.slice().sort((a, b) => a.mes.localeCompare(b.mes)), comSp = L.some(x => x.sp);
   // com mais de 6 meses, valores sem "R$" e sem centavos (e espaçamento menor) para a tabela caber na tela
   const comp = L.length > 6, fm = comp ? v => (Math.round(v) || 0).toLocaleString('pt-BR') : brl;
@@ -62,9 +62,17 @@ function dreTabela(linhas, cats = [], { total = true } = {}) {
   const aj = x => (x.finalML ?? x.final) - (mc(x) - x.adsTotal - x.perdaDevolucao - x.outras); // reembolsos parciais, vendas mantidas por cobertura etc.
   const cel = (v, o = {}, x) => `<td class="n ${o.c || ''}">${o.pct ? pct(v) : o.neg ? (v ? '(−) ' + fm(Math.abs(v)) : fm(0)) : fm(v)}${o.nota && x ? o.nota(x) : ''}</td>`;
   const T = html => (total ? html : '');
-  const sec = t => `<tr class="sec"><td colspan="${L.length + (total ? 2 : 1)}">${t}</td></tr>`;
-  const row = (nome, f, o = {}) => `<tr class="${o.cls || ''}"><td class="lb">${nome}</td>${L.map(x => cel(f(x), o, x)).join('')}${T(cel(o.pct ? (o.tot ? o.tot() : 0) : sm(0, f), { ...o, nota: null }))}</tr>`;
-  const eq = (nome, f, ft) => `<tr class="eq"><td class="lb">${nome}</td>${L.map(x => `<td class="n">${f(x)}</td>`).join('')}${T(`<td class="n">${ft()}</td>`)}</tr>`;
+  const secH = t => `<tr class="sec"><td colspan="${L.length + (total ? 2 : 1)}">${t}</td></tr>`;
+  const rowH = (nome, f, o = {}) => `<tr class="${o.cls || ''}"><td class="lb">${nome}</td>${L.map(x => cel(f(x), o, x)).join('')}${T(cel(o.pct ? (o.tot ? o.tot() : 0) : sm(0, f), { ...o, nota: null }))}</tr>`;
+  const eqH = (nome, f, ft) => `<tr class="eq"><td class="lb">${nome}</td>${L.map(x => `<td class="n">${f(x)}</td>`).join('')}${T(`<td class="n">${ft()}</td>`)}</tr>`;
+  // csv: as mesmas linhas como listas de valores (números completos; deduções negativas) para a planilha
+  const txt = h => { const e = document.createElement('div'); e.innerHTML = h; return e.textContent; };
+  const vc = (v, o) => (o.neg ? -(v || 0) : v || 0);
+  const { sec, row, eq } = csv ? {
+    sec: t => [txt(t)],
+    row: (nome, f, o = {}) => [txt(nome), ...L.map(x => vc(f(x), o)), ...(total ? [vc(sm(0, f), o)] : [])],
+    eq: (nome, f, ft) => [txt(nome), ...L.map(f), ...(total ? [ft()] : [])],
+  } : { sec: secH, row: rowH, eq: eqH };
   const rec = x => x.receitaTotal ?? x.receita, totRec = sm(0, rec), sp = (x, k) => x.sp?.[k] || 0;
   const ml = comSp ? 'MERCADO LIVRE · ' : '';
   const out = [
@@ -100,7 +108,11 @@ function dreTabela(linhas, cats = [], { total = true } = {}) {
     eq(`Margem ${cats.length ? 'antes dos custos fixos' : 'final'}`, x => pct(x.margem), () => pct(totRec ? sm(0, x => x.final) / totRec : 0)),
     eq(comSp ? 'Pedidos (ML + Shopee)' : 'Pedidos', x => num(x.pedidosTotal ?? x.pedidos), () => num(sm(0, x => x.pedidosTotal ?? x.pedidos))),
   ];
-  return `${comp ? '<p style="margin:0 0 6px;color:var(--mut);font-size:11.5px">Valores em R$, sem centavos (muitos meses na tabela).</p>' : ''}<div class="tw dre"><table id="tdre"${comp ? ' class="cmp"' : ''}><thead><tr><th>${'Demonstrativo'}</th>${L.map(x => x.avisos?.length ? `<th class="n" title="${esc(x.avisos.join(' · '))}">${mesNome(x.mes)} <span style="color:#f59e0b;cursor:help">⚠</span></th>` : `<th class="n">${mesNome(x.mes)}</th>`).join('')}${T('<th class="n">Total</th>')}</tr></thead><tbody>${out.join('')}</tbody></table></div>`;
+  if (csv) return [['Demonstrativo', ...L.map(x => mesNome(x.mes)), ...(total ? ['Total'] : [])], ...out];
+  // título do mês: 🔒 fechado, ⚠ incompleto (motivos ao passar o mouse)
+  const thMes = x => { const t = [...(x.fechado ? [x.fechado.txt] : []), ...(x.avisos || [])];
+    return `<th class="n"${t.length ? ` title="${esc(t.join(' · '))}"` : ''}>${mesNome(x.mes)}${x.fechado ? ' <span style="cursor:help">🔒</span>' : ''}${x.avisos?.length ? ' <span style="color:#f59e0b;cursor:help">⚠</span>' : ''}</th>`; };
+  return `${comp ? '<p style="margin:0 0 6px;color:var(--mut);font-size:11.5px">Valores em R$, sem centavos (muitos meses na tabela).</p>' : ''}<div class="tw dre"><table id="tdre"${comp ? ' class="cmp"' : ''}><thead><tr><th>${'Demonstrativo'}</th>${L.map(thMes).join('')}${T('<th class="n">Total</th>')}</tr></thead><tbody>${out.join('')}</tbody></table></div>`;
 }
 
 // Caixa "Custos fixos do negócio" do DRE: lista, cadastra, altera e exclui. Valor por mês, com mês de início e (se tiver) de fim.
@@ -166,7 +178,8 @@ Object.assign(VIEWS, {
   // arg (hash dre:<arg>): últimos N meses, um mês, intervalo ou meses escolhidos (ver drePeriodo)
   async dre(arg) {
     const P = drePeriodo(arg), sel = P.sel, umMes = P.tipo === 'mes';
-    const d = await api('dre', `&de=${P.de}&ate=${P.ate}`);
+    // FECH = fechamentos guardados; null = servidor ainda não tem a função (botões ficam escondidos)
+    const [d, FECH] = await Promise.all([api('dre', `&de=${P.de}&ate=${P.ate}`), fetch('api/dre/fechamentos').then(r => (r.ok ? r.json() : null)).catch(() => null)]);
     const g = {}, mesVazio = mes => ({ mes, pedidos: 0, receita: 0, devolvido: 0, comissao: 0, frete: 0, imposto: 0, custo: 0, ads: 0, adsSemVenda: 0, lucro: 0, perdaDevolucao: 0, freteNF: 0 });
     d.porMes.forEach(x => { const o = g[x.mes] ||= mesVazio(x.mes);
       for (const k of Object.keys(o)) if (k !== 'mes') o[k] += x[k] || 0; });
@@ -198,6 +211,15 @@ Object.assign(VIEWS, {
         impostoTotal: m.imposto + (sp?.imposto || 0), margem: receitaTotal ? final / receitaTotal : 0, fixos, fixosTotal, liquido: final - fixosTotal };
     });
     todas.forEach(x => { x.avisos = avisosDoMes(x, d); });
+    // fechamento mensal: foto dos números do mês para o filtro da tela (loja e, na versão com Shopee, canal); avisa se algo mudou depois
+    const filtroFech = $('#loja').value + (typeof canal === 'string' && canal !== 'ambos' ? '.' + canal : '');
+    const filtroTxt = 'Loja: ' + ($('#loja').selectedOptions[0]?.text || 'Todas as lojas') + (typeof canal === 'string' ? ' · Canal: ' + ({ ambos: 'Mercado Livre + Shopee', ml: 'Mercado Livre', shopee: 'Shopee' })[canal] : '');
+    const CAMPOS = { receitaTotal: 'Receita', comissao: 'Comissão', frete: 'Frete', imposto: 'Imposto', custo: 'Custo dos produtos', adsTotal: 'Ads', perdaDevolucao: 'Perda com devoluções', outras: 'Outras cobranças da fatura', spLucro: 'Lucro Shopee', final: 'Lucro das vendas', fixosTotal: 'Custos fixos', liquido: 'Lucro líquido', pedidosTotal: 'Pedidos' };
+    const fotoMes = x => Object.fromEntries(Object.keys(CAMPOS).map(k => [k, Math.round((x[k] || 0) * 100) / 100]));
+    todas.forEach(x => { const f = FECH?.[`${x.mes}|${filtroFech}`]; if (!f) return;
+      const mud = Object.keys(CAMPOS).filter(k => k in f.linha && Math.abs((x[k] || 0) - f.linha[k]) > 0.5);
+      x.fechado = { em: f.fechado_em, mud, foto: f.linha, txt: `fechado em ${new Date(f.fechado_em).toLocaleDateString('pt-BR')}${mud.length ? ' · mudou depois: ' + mud.map(k => CAMPOS[k]).join(', ') : ' · sem mudança desde então'}` }; });
+    const BTN2 = 'background:#fff;color:var(--ac);border:1px solid var(--bd);padding:6px 12px;font-size:12px', tabOpts = { total: !(P.tipo === 'mes'), soShopee: typeof soSp === 'boolean' && soSp };
     // período escolhido: os cartões somam só ele; com um mês só, a tabela mostra também o mês anterior para comparar
     const linhas = todas.filter(x => P.meses.includes(x.mes));
     const tabela = P.tabela ? todas.filter(x => P.tabela.includes(x.mes)) : linhas;
@@ -215,6 +237,7 @@ Object.assign(VIEWS, {
     const comAviso = tabela.filter(x => x.avisos.length), blocos = [];
     for (const x of comAviso) { const txt = x.avisos.join('; '), u = blocos.at(-1);
       if (u && u.txt === txt && somaMes(u.ate, 1) === x.mes) u.ate = x.mes; else blocos.push({ de: x.mes, ate: x.mes, txt }); }
+    for (const x of tabela.filter(x => x.fechado?.mud.length)) aviso.push(`<b>${mesNome(x.mes)} mudou depois do fechamento</b> (${new Date(x.fechado.em).toLocaleDateString('pt-BR')}): ` + x.fechado.mud.map(k => `${CAMPOS[k]} ${k === 'pedidosTotal' ? num(x.fechado.foto[k]) + ' → ' + num(x[k]) : brl(x.fechado.foto[k]) + ' → ' + brl(x[k])}`).join(' · ') + '. Se a mudança estiver certa, abra o mês e use “Atualizar fechamento”.');
     if (blocos.length) aviso.push(`<b>${comAviso.length > 1 ? 'Meses incompletos' : 'Mês incompleto'}</b>: o resultado ${comAviso.length > 1 ? 'desses meses' : 'deste mês'} ainda não está fechado.
       <ul style="margin:6px 0 0;padding-left:20px">${blocos.map(g => `<li><b>${g.de === g.ate ? mesNome(g.de) : `${mesNome(g.de)} a ${mesNome(g.ate)}`}</b>: ${esc(g.txt)}</li>`).join('')}</ul>`);
     // opções do período: atalhos, anos e meses desde o pedido mais antigo (até 60 meses), mais intervalo e meses escolhidos à mão
@@ -230,6 +253,7 @@ Object.assign(VIEWS, {
     $('#view').innerHTML = `<div class="box" style="padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><label style="display:flex;align-items:center;gap:8px;font-weight:600">Período do DRE
         <select id="drep" style="${SEL}">${grupos.map(([n, os]) => `<optgroup label="${n}">${os.map(([v, t]) => `<option value="${v}" ${v === valOpc ? 'selected' : ''}>${esc(t)}</option>`).join('')}</optgroup>`).join('')}</select></label>
         ${umMes ? `<small style="color:var(--mut)">a tabela mostra ${tabela.length > 1 ? `${mesNome(tabela[0].mes)} ao lado para comparar` : 'só este mês'}</small>` : ''}
+        ${umMes && FECH && linhas[0] ? (linhas[0].fechado ? `<span style="color:var(--mut)">🔒 ${esc(linhas[0].fechado.txt)}</span><button id="drefecha" style="${BTN2}">Atualizar fechamento</button><button id="dreabre" style="${BTN2}">Reabrir</button>` : `<button id="drefecha" style="${BTN2}">🔒 Fechar ${mesNome(sel)}</button><small style="color:var(--mut)">guarda os números de agora para comparar depois</small>`) : ''}
         <div id="drex" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;flex-basis:100%"></div></div>`
       + aviso.map(a => `<div class="box" style="border-color:var(--warn);margin-bottom:10px">⚠ ${a}</div>`).join('') + `<div class="cards">
       ${card2(`Receita${comSp ? ' ML + Shopee' : ''} (${rot})`, brl(tot('receitaTotal')))}${comFixos
@@ -239,7 +263,7 @@ Object.assign(VIEWS, {
       ${card2(`Imposto (${rot})`, '−' + brl(tot('impostoTotal')))}${card2('Outras cobranças da fatura', '−' + brl(tot('outras')), 'warn')}
       ${card2(`Perda real com devoluções${comSp ? ' (ML)' : ''}`, tot('perdaDevolucao') >= 0 ? '−' + brl(tot('perdaDevolucao')) : '+' + brl(-tot('perdaDevolucao')), tot('perdaDevolucao') > 0 ? 'bad' : 'ok')}${card2(`Estornado em pedidos cancelados${comSp ? ' (ML)' : ''} <span title="Valor que voltou ao comprador nos pedidos cancelados com reembolso (a maioria cancelada antes do envio). Esses pedidos já estão fora da receita: não é prejuízo. O que você perdeu de fato está em “Perda real com devoluções”." style="cursor:help">ⓘ</span>`, brl(tot('devolvido')))}</div>
       ${umMes ? '' : `<div class="box" style="margin-bottom:14px"><h3>${comFixos ? 'Lucro líquido' : 'Lucro final'} e margem por mês</h3><div style="height:260px"><canvas id="c1"></canvas></div></div>`}
-      <div class="box" style="margin-bottom:14px"><h3>${umMes ? `DRE de ${mesNome(sel)}` : `DRE mensal · ${rot}`} <small>(mês = data do pedido, fuso de Brasília)</small></h3>${dreTabela(tabela, cats, { total: !umMes })}
+      <div class="box dre-imp" style="margin-bottom:14px"><h3 style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">${umMes ? `DRE de ${mesNome(sel)}` : `DRE mensal · ${rot}`} <small>(mês = data do pedido, fuso de Brasília)</small><span style="margin-left:auto;display:flex;gap:6px"><button id="drecsv" style="${BTN2}">Baixar planilha</button><button id="dreimp" style="${BTN2}">Imprimir / PDF</button></span></h3><p class="so-imp" style="margin:0 0 8px;color:var(--mut)">${esc(filtroTxt)} · gerado em ${new Date().toLocaleString('pt-BR')}</p>${dreTabela(tabela, cats, tabOpts)}
         <p style="color:var(--mut);margin:8px 0 0;font-size:12px">Receita já desconta devoluções (pedidos reembolsados saem da receita). Por isso o “estornado em pedidos cancelados” não é descontado de novo: o que entra no resultado é a perda real (frete, tarifa de devolução e comissão não estornados). “Outras (fatura)” = serviços do Full (armazenagem, coleta, inconformidade), eShop, DIFAL e cobranças não identificadas, líquidas das bonificações. <b>Não</b> entram aqui: a taxa de parcelamento (CFONPN — acréscimo pago pelo comprador e repassado ao Mercado Pago, soma zero para você) e as tarifas de devolução (já contadas pedido a pedido em “Perda devol.”). Ads: API de Ads nos meses inteiros cobertos pela série diária (os últimos 90 dias e os dias que o sistema guardou desde que passou a acumular o histórico); antes disso, o valor da fatura. Atenção: a fatura do ML é por <b>período de cobrança</b> (≈ dia 16 do mês anterior ao dia 15), não por mês-calendário — “Outras” e o Ads da fatura são aproximações do mês. O mês corrente usa a fatura ainda em aberto (parcial).${comSp ? ' Shopee: valores do extrato (escrow) de cada pedido pela data do pedido; Ads = gasto total do mês na Shopee (inclui dias sem venda); ajustes = cupons do vendedor, compensações e retenções.' : ''}${comFixos ? ' Custos fixos: valor do mês inteiro, inclusive no mês corrente (que ainda está com as vendas pela metade).' : ''}</p></div>
       <div class="box" style="margin-bottom:14px" id="cfbox"></div>
       <div class="box"><h3>Faturas do Mercado Livre (cobranças por tipo, já líquidas das bonificações)</h3>${fats.length ? fats.slice().reverse().map(f => `<details style="margin-bottom:6px"><summary style="cursor:pointer">${ln(f)} ${esc(f.grupo === 'MP' ? 'Mercado Pago' : 'Mercado Livre')} · fatura ${esc(f.key)} · <b>${brl(f.total)}</b>
@@ -269,6 +293,27 @@ Object.assign(VIEWS, {
     };
     painel(valOpc);
     $('#drep').onchange = () => { const v = $('#drep').value; if (v === 'intervalo' || v === 'escolher') painel(v); else vai(v); };
+    // planilha: a mesma tabela com números completos (deduções negativas); separador ; e vírgula decimal (Excel em português)
+    $('#drecsv').onclick = () => {
+      const cel = c => (typeof c === 'number' ? c.toFixed(2).replace('.', ',') : `"${String(c ?? '').replace(/"/g, '""')}"`);
+      const txt = '\uFEFF' + [[`DRE ${umMes ? mesNome(sel) : rot}`], [filtroTxt], [], ...dreTabela(tabela, cats, { ...tabOpts, csv: true })].map(r => r.map(cel).join(';')).join('\r\n');
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'text/csv;charset=utf-8' }));
+      a.download = `dre-${(umMes ? sel : rot).replace(/[^\w-]+/g, '-')}.csv`; a.click(); URL.revokeObjectURL(a.href);
+    };
+    $('#dreimp').onclick = () => { document.body.classList.add('imp-dre'); addEventListener('afterprint', () => document.body.classList.remove('imp-dre'), { once: true }); print(); };
+    // fechar / atualizar / reabrir o mês da tela
+    if ($('#drefecha')) $('#drefecha').onclick = async () => {
+      const x = linhas[0];
+      if (x.avisos.length && !confirm(`${mesNome(sel)} ainda está incompleto: ${x.avisos.join('; ')}.\n\nFechar mesmo assim?`)) return;
+      const r = await fetch('api/dre/fechamentos', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mes: sel, filtro: filtroFech, linha: fotoMes(x) }) });
+      if (!r.ok) return alert((await r.json().catch(() => ({}))).erro || 'Não foi possível fechar o mês.');
+      go();
+    };
+    if ($('#dreabre')) $('#dreabre').onclick = async () => {
+      if (!confirm(`Reabrir ${mesNome(sel)}? A foto do fechamento é descartada; os números do mês continuam calculados normalmente.`)) return;
+      await fetch(`api/dre/fechamentos/${sel}/${encodeURIComponent(filtroFech)}`, { method: 'DELETE' });
+      go();
+    };
   },
 
   // ───────── DEVOLUÇÕES ─────────
