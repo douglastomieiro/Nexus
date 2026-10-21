@@ -52,10 +52,12 @@ function avisosDoMes(x, d, { ml = true, shopee = true } = {}) {
 //   (x.finalML = lucro do ML, x.final = ML + Shopee, x.receitaTotal / x.pedidosTotal = os dois canais)
 function dreTabela(linhas, cats = [], { total = true } = {}) {
   const L = linhas.slice().sort((a, b) => a.mes.localeCompare(b.mes)), comSp = L.some(x => x.sp);
+  // com mais de 6 meses, valores sem "R$" e sem centavos (e espaçamento menor) para a tabela caber na tela
+  const comp = L.length > 6, fm = comp ? v => (Math.round(v) || 0).toLocaleString('pt-BR') : brl;
   const sm = (k, f) => L.reduce((t, x) => t + f(x), 0);
   const mc = x => x.receita - x.comissao - x.frete - x.imposto - x.custo;
   const aj = x => (x.finalML ?? x.final) - (mc(x) - x.adsTotal - x.perdaDevolucao - x.outras); // reembolsos parciais, vendas mantidas por cobertura etc.
-  const cel = (v, o = {}, x) => `<td class="n ${o.c || ''}">${o.pct ? pct(v) : o.neg ? (v ? '(−) ' + brl(Math.abs(v)) : brl(0)) : brl(v)}${o.nota && x ? o.nota(x) : ''}</td>`;
+  const cel = (v, o = {}, x) => `<td class="n ${o.c || ''}">${o.pct ? pct(v) : o.neg ? (v ? '(−) ' + fm(Math.abs(v)) : fm(0)) : fm(v)}${o.nota && x ? o.nota(x) : ''}</td>`;
   const T = html => (total ? html : '');
   const sec = t => `<tr class="sec"><td colspan="${L.length + (total ? 2 : 1)}">${t}</td></tr>`;
   const row = (nome, f, o = {}) => `<tr class="${o.cls || ''}"><td class="lb">${nome}</td>${L.map(x => cel(f(x), o, x)).join('')}${T(cel(o.pct ? (o.tot ? o.tot() : 0) : sm(0, f), { ...o, nota: null }))}</tr>`;
@@ -95,7 +97,7 @@ function dreTabela(linhas, cats = [], { total = true } = {}) {
     eq(`Margem ${cats.length ? 'antes dos custos fixos' : 'final'}`, x => pct(x.margem), () => pct(totRec ? sm(0, x => x.final) / totRec : 0)),
     eq(comSp ? 'Pedidos (ML + Shopee)' : 'Pedidos', x => num(x.pedidosTotal ?? x.pedidos), () => num(sm(0, x => x.pedidosTotal ?? x.pedidos))),
   ];
-  return `<div class="tw dre"><table id="tdre"><thead><tr><th>${'Demonstrativo'}</th>${L.map(x => x.avisos?.length ? `<th class="n" title="${esc(x.avisos.join(' · '))}">${mesNome(x.mes)} <span style="color:#f59e0b;cursor:help">⚠</span></th>` : `<th class="n">${mesNome(x.mes)}</th>`).join('')}${T('<th class="n">Total</th>')}</tr></thead><tbody>${out.join('')}</tbody></table></div>`;
+  return `${comp ? '<p style="margin:0 0 6px;color:var(--mut);font-size:11.5px">Valores em R$, sem centavos (muitos meses na tabela).</p>' : ''}<div class="tw dre"><table id="tdre"${comp ? ' class="cmp"' : ''}><thead><tr><th>${'Demonstrativo'}</th>${L.map(x => x.avisos?.length ? `<th class="n" title="${esc(x.avisos.join(' · '))}">${mesNome(x.mes)} <span style="color:#f59e0b;cursor:help">⚠</span></th>` : `<th class="n">${mesNome(x.mes)}</th>`).join('')}${T('<th class="n">Total</th>')}</tr></thead><tbody>${out.join('')}</tbody></table></div>`;
 }
 
 // Caixa "Custos fixos do negócio" do DRE: lista, cadastra, altera e exclui. Valor por mês, com mês de início e (se tiver) de fim.

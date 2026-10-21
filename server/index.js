@@ -241,7 +241,8 @@ registrarDescontos(app); // Gestão Mercado Livre > Descontos (aplicar/remover d
 // Chart.js servido do próprio app (sem CDN: funciona offline e não depende de terceiros)
 const CHART = path.join(path.dirname(createRequire(import.meta.url).resolve('chart.js')), 'chart.umd.js');
 app.get('/vendor/chart.umd.js', (_, res) => res.sendFile(CHART));
-app.use(express.static(path.join(ROOT, 'web')));
+// no-cache: o navegador sempre confere com o servidor (resposta 304 se nada mudou), senão segura o index.html/CSS antigos depois de uma atualização
+app.use(express.static(path.join(ROOT, 'web'), { setHeaders: r => r.setHeader('Cache-Control', 'no-cache') }));
 // `pronto` resolve com a porta real (o app desktop espera por ela antes de abrir a janela).
 export const pronto = new Promise((resolve, reject) => {
   const srv = app.listen(PORT, HOST, () => {

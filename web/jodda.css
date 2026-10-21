@@ -25,11 +25,11 @@
 
 /* tabela rica */
 .rt{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
-.rt th{background:#fff;color:var(--mut);font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:9px 10px;border-bottom:1px solid var(--bd);white-space:nowrap;cursor:default}
+.rt th{background:#fff;color:var(--mut);font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:9px 7px;border-bottom:1px solid var(--bd);white-space:normal;min-width:64px;cursor:default}
 .rt th.s{cursor:pointer}.rt th.s:hover{color:var(--ac)}
-.rt td{padding:10px;border-bottom:1px solid #eef1f6;vertical-align:middle}
+.rt td{padding:10px 7px;border-bottom:1px solid #eef1f6;vertical-align:middle}
 .rt tbody tr:hover td{background:#f8faff}.rt td.n,.rt th.n{text-align:right;font-variant-numeric:tabular-nums}.rt td.c,.rt th.c{text-align:center}
-.pr{display:flex;align-items:center;gap:10px;min-width:260px;max-width:380px}
+.pr{display:flex;align-items:center;gap:10px;min-width:220px;max-width:380px}
 .pr .th{width:42px;height:42px;border-radius:8px;object-fit:cover;background:#f1f5f9;flex-shrink:0;box-shadow:0 0 0 1px var(--bd);display:grid;place-items:center;color:#94a3b8}
 .pr .th svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8}
 .pr b{display:block;font-weight:600;color:#1e293b;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
