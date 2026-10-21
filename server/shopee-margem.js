@@ -2,7 +2,7 @@
 //   escrow_amount = o que a Shopee repassa ao vendedor (já sem comissão, taxa de serviço, frete líquido, estornos de devolução…)
 //   lucro = escrow − imposto − custo do produto  (receita − devolução − comissão − frete − ajustes = escrow, sempre fecha)
 import { db } from './db.js';
-import { getConfig, getCustos, aliquotaPctFn } from './margem.js';
+import { getConfig, getCustos, getCustosHist, custoNoDia, aliquotaPctFn } from './margem.js';
 
 const mlDe = l => 'loja' + l.replace('shopee', '');        // conta Shopee → conta ML da mesma empresa (alíquota do Simples)
 const r2 = n => Math.round(n * 100) / 100;
@@ -15,7 +15,8 @@ const skuDe = i => String(i.model_sku || '').trim() || String(i.item_sku || '').
 export function calcularShopee({ lojas, desde, ate = '9999' }) {
   const key = JSON.stringify([lojas, desde, ate]), hit = cache.get(key);
   if (hit && Date.now() - hit.t < 30e3) return hit.v;
-  const cfg = getConfig(), custos = getCustos();
+  const cfg = getConfig(), custos = getCustos(), histCusto = getCustosHist();
+  const cEm = (k, d) => custoNoDia(histCusto, custos, k, d); // custo em vigor no dia do pedido
   const tot = { receita: 0, devolucao: 0, comissao: 0, frete: 0, ajustes: 0, imposto: 0, custo: 0, ads: 0, lucro: 0, freteNF: 0 };
   const porDia = {}, porSku = {}, porMes = {}, pedidos = [], devolucoes = [];
   let recSemCusto = 0, recEstimado = 0, canceladas = 0, adsSemVenda = 0, adsGasto = 0;
@@ -65,7 +66,7 @@ export function calcularShopee({ lojas, desde, ate = '9999' }) {
       const perde = rs.length && cfg.devolucao_perde_produto;
 
       for (const x of itens) {
-        const cU = custos[x.sku] ?? custos[String(x.i.item_id)], part = receita ? x.bruto / receita : 1 / itens.length;
+        const cU = cEm(x.sku, d) ?? cEm(String(x.i.item_id), d), part = receita ? x.bruto / receita : 1 / itens.length;
         const devI = devolucao * part, comI = comissao * part, frI = frete * part, ajI = ajustes * part, impI = imposto * part;
         const custo = cU == null ? 0 : cU * x.q * (perde ? 1 : 1 - fracRef);
         if (cU == null) { recSemCusto += x.bruto; pedido.flags.includes('sem custo') || pedido.flags.push('sem custo'); }

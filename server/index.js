@@ -17,7 +17,7 @@ import { registrarShopee, alertasShopee } from './shopee-rotas.js';
 import { registrarContas } from './contas-rotas.js';
 import { calcularShopee } from './shopee-margem.js';
 import { SHOPEE } from './shopee.js';
-import { calcular, listarSkus, getCustos, setCusto, getConfig, setConfig, aliquotaAuto, faturasML } from './margem.js';
+import { calcular, listarSkus, getCustos, getCustosHist, setCusto, getConfig, setConfig, aliquotaAuto, faturasML } from './margem.js';
 
 const app = express();
 // PORT=0 → porta livre sorteada pelo sistema (o app desktop usa assim). Sem PORT: 4000.
@@ -182,9 +182,12 @@ app.get('/api/custos', H(q => { // SKUs do ML + SKUs que só vendem na Shopee (o
     if (ex) { ex.lojas = [...new Set([...ex.lojas, ...s.lojas])]; ex.unidades += s.unidades; ex.receita += s.receita; }
     else { const n = { sku: s.sku, titulo: s.titulo, item: s.item, lojas: s.lojas, unidades: s.unidades, receita: s.receita, preco: s.unidades ? s.receita / s.unidades : 0, anuncios: s.anuncios, custo: s.custoUnit }; ml.push(n); vistos.set(s.sku, n); }
   }
+  // hist = vigência do custo ([[desde, custo], ...]; '0000-00-00' = vale para todo o passado), só quando o custo já mudou
+  const hist = getCustosHist(); for (const s of ml) if (hist[s.sku]?.length > 1) s.hist = hist[s.sku];
   return ml.sort((a, b) => b.receita - a.receita);
 }));
-app.post('/api/custos', H((_, req) => { for (const { sku, custo } of [].concat(req.body)) if (sku) setCusto(String(sku), custo); return { ok: true }; }));
+// desde (opcional): dia em que o custo passa a valer; sem ele, vale a partir de hoje (o 1º custo do SKU vale para todo o passado)
+app.post('/api/custos', H((_, req) => { for (const { sku, custo, desde } of [].concat(req.body)) if (sku) setCusto(String(sku), custo, desde); return { ok: true }; }));
 // dia (AAAA-MM-DD, Brasília) do pedido mais antigo das contas: o DRE oferece os meses a partir dele e avisa se o 1º mês começa no meio (guardado por 10 min)
 const primeiroDiaCache = new Map();
 function primeiroDia(lojas) {

@@ -7,9 +7,20 @@ import { agendarBackup, fazerBackup, restaurar } from './backup.js';
 db.exec(`
 CREATE TABLE IF NOT EXISTS custos (sku TEXT PRIMARY KEY, custo REAL NOT NULL, atualizado_em INTEGER);
 CREATE TABLE IF NOT EXISTS config (chave TEXT PRIMARY KEY, valor TEXT);
+-- vigência do custo: cada SKU tem um custo base (desde '0000-00-00' = vale para todo o passado) e as trocas, cada uma a partir de um dia.
+-- O pedido usa o custo em vigor na data dele. A tabela custos guarda o custo de hoje (telas e backup).
+CREATE TABLE IF NOT EXISTS custos_hist (sku TEXT NOT NULL, desde TEXT NOT NULL, custo REAL NOT NULL, atualizado_em INTEGER, PRIMARY KEY (sku, desde));
 `);
-// custos digitados à mão são insubstituíveis: restaura do backup se a tabela estiver vazia e garante um backup inicial
-{ const r = restaurar(); if (r.restaurado) console.log(`[backup] ${r.restaurado} custos restaurados do backup (${r.de})`); fazerBackup('inicialização'); }
+export const CUSTO_BASE = '0000-00-00';
+const hojeBR = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+const diaBR = ms => new Date(ms - 3 * 3600e3).toISOString().slice(0, 10);
+// custos digitados à mão são insubstituíveis: restaura do backup se a tabela estiver vazia e garante um backup inicial.
+// Custos de antes da vigência (sem histórico) viram o custo base do SKU. Só acrescenta: nada é apagado.
+{
+  const r = restaurar(); if (r.restaurado) console.log(`[backup] ${r.restaurado} custos restaurados do backup (${r.de})`);
+  db.prepare(`INSERT OR IGNORE INTO custos_hist (sku, desde, custo, atualizado_em) SELECT sku, '${CUSTO_BASE}', custo, atualizado_em FROM custos WHERE sku NOT IN (SELECT sku FROM custos_hist)`).run();
+  fazerBackup('inicialização');
+}
 
 // ── Alíquota do Simples ──
 // Por enquanto só MANUAL: o usuário informa a alíquota (%) de cada conta em Configurações.
@@ -21,12 +32,29 @@ export const getConfig = () => {
   return { ...Object.fromEntries(Object.keys(LOJAS).map(l => ['aliquota_' + l, Number(c['aliquota_' + l] ?? 0)])), devolucao_perde_produto: Number(c.devolucao_perde_produto ?? 0), aliquota_modo: 'manual' };
 };
 export const setConfig = (k, v) => { db.prepare('INSERT INTO config (chave,valor) VALUES (?,?) ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor').run(k, String(v)); cache.clear(); agendarBackup('config ' + k); };
-export const getCustos = () => Object.fromEntries(db.prepare('SELECT sku, custo FROM custos').all().map(r => [r.sku, r.custo]));
-export const setCusto = (sku, custo) => {
+// custo de hoje de cada SKU (o em vigor no histórico; sem histórico, o da tabela custos)
+export const getCustos = () => Object.fromEntries(db.prepare(`SELECT c.sku, COALESCE((SELECT h.custo FROM custos_hist h WHERE h.sku=c.sku AND h.desde<=? ORDER BY h.desde DESC LIMIT 1), c.custo) custo FROM custos c`).all(hojeBR()).map(r => [r.sku, r.custo]));
+// histórico de vigência: { sku: [[desde, custo], ...] } em ordem de data
+export const getCustosHist = () => { const h = {}; for (const r of db.prepare('SELECT sku, desde, custo FROM custos_hist ORDER BY sku, desde').all()) (h[r.sku] ||= []).push([r.desde, r.custo]); return h; };
+// custo em vigor num dia (AAAA-MM-DD); SKU sem histórico usa o custo atual
+export const custoNoDia = (hist, atuais, sku, dia) => {
+  const h = hist[sku]; if (!h) return atuais[sku];
+  let v; for (const [d, c] of h) { if (d > dia) break; v = c; } return v;
+};
+// desde: dia em que o custo novo passa a valer (padrão: hoje). O 1º custo do SKU vale para todo o passado.
+// Correção no mesmo dia: se o último registro do SKU foi gravado hoje (e não veio data), só troca o valor dele.
+export const setCusto = (sku, custo, desde) => {
   if (typeof custo === 'string') custo = custo.trim().replace(',', '.');
-  if (custo === null || custo === '' || custo === undefined) db.prepare('DELETE FROM custos WHERE sku=?').run(sku);
+  if (desde != null && desde !== '' && desde !== CUSTO_BASE && !/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(desde)) throw Object.assign(new Error('data de vigência inválida'), { status: 400 });
+  if (custo === null || custo === '' || custo === undefined) { db.prepare('DELETE FROM custos WHERE sku=?').run(sku); db.prepare('DELETE FROM custos_hist WHERE sku=?').run(sku); }
   else if (!Number.isFinite(Number(custo)) || Number(custo) < 0) throw Object.assign(new Error('custo inválido'), { status: 400 });
-  else db.prepare('INSERT INTO custos (sku,custo,atualizado_em) VALUES (?,?,?) ON CONFLICT(sku) DO UPDATE SET custo=excluded.custo, atualizado_em=excluded.atualizado_em').run(sku, Number(custo), Date.now());
+  else {
+    const agora = Date.now(), hist = db.prepare('SELECT desde, atualizado_em FROM custos_hist WHERE sku=? ORDER BY desde').all(sku), ult = hist.at(-1);
+    const d = !hist.length ? CUSTO_BASE : desde ? desde : ult.atualizado_em && diaBR(ult.atualizado_em) === hojeBR() ? ult.desde : hojeBR();
+    db.prepare('INSERT INTO custos_hist (sku,desde,custo,atualizado_em) VALUES (?,?,?,?) ON CONFLICT(sku,desde) DO UPDATE SET custo=excluded.custo, atualizado_em=excluded.atualizado_em').run(sku, d, Number(custo), agora);
+    const vig = db.prepare('SELECT custo FROM custos_hist WHERE sku=? AND desde<=? ORDER BY desde DESC LIMIT 1').get(sku, hojeBR()) ?? { custo: Number(custo) };
+    db.prepare('INSERT INTO custos (sku,custo,atualizado_em) VALUES (?,?,?) ON CONFLICT(sku) DO UPDATE SET custo=excluded.custo, atualizado_em=excluded.atualizado_em').run(sku, vig.custo, agora);
+  }
   cache.clear(); agendarBackup("custo " + sku);
 };
 
@@ -85,7 +113,8 @@ function carregarAds(lojas) {
 export function calcular({ lojas, desde, ate = '9999' }) {
   const key = JSON.stringify([lojas, desde, ate]);
   const hit = cache.get(key); if (hit && Date.now() - hit.t < 30e3) return hit.v;
-  const cfg = getConfig(), custos = getCustos();
+  const cfg = getConfig(), custos = getCustos(), histCusto = getCustosHist();
+  const cEm = (k, d) => custoNoDia(histCusto, custos, k, d); // custo em vigor no dia do pedido
   const ph = lojas.map(() => '?').join(',');
   const orders = db.prepare(`SELECT loja, body FROM raw WHERE recurso='order' AND status=200 AND loja IN (${ph})
     AND date(json_extract(body,'$.date_created'),'-3 hours') >= ? AND date(json_extract(body,'$.date_created'),'-3 hours') <= ?`).all(...lojas, desde, ate).map(r => ({ loja: r.loja, o: JSON.parse(r.body) }));
@@ -196,7 +225,7 @@ export function calcular({ lojas, desde, ate = '9999' }) {
         const freteVolta = ex ? ex.devolucao.perdido : cls.reduce((t, cl) => t + (custoRetorno[x.loja + ':' + cl.id] || 0), 0);
         // produto não voltou (extraviado/não entregue/mediação) → o custo dele é perdido; se voltou ("return"), volta ao estoque
         const produtoVoltou = comMp && pagos.some(p => (p.coberto || p.detalhe === 'bpp_covered') && /return/.test(p.fluxo));
-        const custoPedido = (o.order_items || []).reduce((t, i) => t + (custos[skuDe(x.loja, i.item)] ?? custos[i.item.id] ?? 0) * i.quantity, 0);
+        const custoPedido = (o.order_items || []).reduce((t, i) => t + (cEm(skuDe(x.loja, i.item), dia(o.date_created)) ?? cEm(i.item.id, dia(o.date_created)) ?? 0) * i.quantity, 0);
         const custoMantido = mantidaOk && !produtoVoltou ? custoPedido : 0;
         // "custo perdido nas devoluções" (Configurações): só se o produto chegou a sair (cancelado antes do envio não perde nada)
         // e não é a venda mantida sem retorno (lá o custo já entra em custoMantido — antes contava duas vezes)
@@ -273,7 +302,7 @@ export function calcular({ lojas, desde, ate = '9999' }) {
       else { const s = somaFrete[x.loja + '|' + i.item.id]; f = s ? (s.f / s.u) * i.quantity : 0; recFreteEst += bruto; pedido.flags.includes('frete estimado') || pedido.flags.push('frete estimado'); }
       const freteNF = (nfFrete[x.loja + ':' + o.id] ?? ((recvCost[fk] ?? 0) * (recEnvio[fk] ? x.rec / recEnvio[fk] : 0))) * (x.rec ? bruto / x.rec : 0) * (1 - fracRef);
       const imposto = (bruto - dev + freteNF) * aliq, impostoFrete = freteNF * aliq;
-      const cUnit = custos[sku] ?? custos[i.item.id];
+      const cUnit = cEm(sku, d) ?? cEm(i.item.id, d);
       const custo = cUnit == null ? 0 : cUnit * (i.quantity - unidDevolvidas(i));
       if (cUnit == null) { recSemCusto += bruto; pedido.flags.includes('sem custo') || pedido.flags.push('sem custo'); }
       let a = 0;
