@@ -186,6 +186,7 @@ app.get('/api/custos', H(q => { // SKUs do ML + SKUs que só vendem na Shopee (o
   const hist = getCustosHist(); for (const s of ml) if (hist[s.sku]?.length > 1) s.hist = hist[s.sku];
   return ml.sort((a, b) => b.receita - a.receita);
 }));
+app.get('/api/custos/vigencia', H(() => ({ ok: true }))); // a tela confere se este servidor já aceita "desde"
 // desde (opcional): dia em que o custo passa a valer; sem ele, vale a partir de hoje (o 1º custo do SKU vale para todo o passado)
 app.post('/api/custos', H((_, req) => { for (const { sku, custo, desde } of [].concat(req.body)) if (sku) setCusto(String(sku), custo, desde); return { ok: true }; }));
 // dia (AAAA-MM-DD, Brasília) do pedido mais antigo das contas: o DRE oferece os meses a partir dele e avisa se o 1º mês começa no meio (guardado por 10 min)

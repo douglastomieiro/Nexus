@@ -486,7 +486,7 @@ const VIEWS2 = {
     const r = await getJ(`api/custos?loja=${$('#loja').value}&dias=${per}`); CUSTOS_TELA = r;
     $('#view').innerHTML = `<div class="box"><h3>Custo unitário por SKU — salva ao sair do campo</h3>
       <div class="bar"><input id="fs" placeholder="Filtrar" style="flex:1"><select id="cp"><option value="90">vendidos em 90 dias</option><option value="365">vendidos em 12 meses</option></select><label><input type="checkbox" id="fc"> só sem custo</label><span id="cn" style="color:var(--mut)"></span></div>
-      <div class="bar" style="margin-top:-4px"><label title="O 1º custo de um SKU vale para todo o passado. Uma troca vale a partir da data escolhida: os pedidos de antes continuam com o custo antigo (o DRE dos meses passados não muda). Corrigir no mesmo dia só substitui o valor.">Custo novo vale
+      <div class="bar" id="cvigbar" style="margin-top:-4px;display:none"><label title="O 1º custo de um SKU vale para todo o passado. Uma troca vale a partir da data escolhida: os pedidos de antes continuam com o custo antigo (o DRE dos meses passados não muda). Corrigir no mesmo dia só substitui o valor.">Custo novo vale
         <select id="cvig"><option value="hoje">a partir de hoje</option><option value="data">a partir de uma data…</option><option value="sempre">para todo o período (corrige o passado)</option></select></label>
         <input type="date" id="cvd" style="display:none"><small style="color:var(--mut)">os pedidos usam o custo que valia na data deles</small></div>
       <details style="margin-bottom:10px"><summary class="lk" style="cursor:pointer">Colar vários custos de uma vez (planilha)</summary>
@@ -495,6 +495,7 @@ const VIEWS2 = {
         <button id="lsv" style="background:var(--ac);border:0;border-radius:6px;padding:6px 14px;font-weight:600;cursor:pointer;margin-top:6px">Salvar lote</button> <span id="lok"></span></details>
       <div id="ls"></div></div>`;
     $('#cp').value = String(per); $('#cp').onchange = () => { window.CUSTOS_DIAS = +$('#cp').value; go(); };
+    fetch('api/custos/vigencia').then(r => r.ok ? r.json() : null).then(j => { if (j?.ok && $('#cvigbar')) $('#cvigbar').style.display = ''; }).catch(() => {});
     $('#cvig').onchange = () => { $('#cvd').style.display = $('#cvig').value === 'data' ? '' : 'none'; if ($('#cvig').value === 'data' && !$('#cvd').value) $('#cvd').value = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10); };
     $('#lsv').onclick = async () => {
       const linhas = $('#lote').value.split(/\r?\n/).map(l => l.trim()).filter(Boolean), lote = [], ruins = [];
