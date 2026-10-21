@@ -208,7 +208,10 @@ VIEWS.abc = async function () {
   const d2 = v => v.toFixed(2).replace('.', ',');
   // Repor: curva A/B vendendo, com margem e sem queda forte → compra para cobrir + prazo + segurança.
   // Só o mínimo: curva C, ou A/B em queda forte → compra só para não faltar durante prazo + segurança. Não repor: parou, margem baixa ou curva C em queda forte. Avaliar: sem custo.
+  // servidor antigo (ainda não reiniciado) não manda estoque nem dias: a recompra fica indisponível em vez de sugerir compra com estoque zero
+  const temRec = !R.linhas.length || 'estoqueProprio' in R.linhas[0];
   const decide = x => {
+    if (!temRec) return Object.assign(x, { md: 0, est: 0, gUn: null, cob: null, dec: 'avaliar', decMotivo: 'Recompra indisponível: reinicie o servidor para ativar.', diasAlvo: 0, comprar: 0, valorCompra: null, decN: 2 });
     const md = x.unidades / R.dias, est = (x.estoqueProprio || 0) + (x.estoqueFull || 0), gUn = x.prevUnidades > 0 ? x.unidades / x.prevUnidades - 1 : null;
     let dec, motivo;
     if (!x.unidades30) [dec, motivo] = ['nao', 'Parou de vender: nenhuma venda nos últimos 30 dias.'];
@@ -229,6 +232,7 @@ VIEWS.abc = async function () {
       <td class="n" title="${esc(compTxt(x))}"><b>${x.comprar ? num(x.comprar) : '—'}</b>${x.valorCompra ? `<br><small style="color:var(--mut)">${brl(x.valorCompra)}</small>` : ''}</td>
       <td class="c" title="${esc(x.decMotivo)}"><span class="sg ${DEC[x.dec][1]}">${DEC[x.dec][0]}</span></td>`;
   const resumoRecompra = () => {
+    if (!temRec) { $('#arpR').textContent = '· indisponível: reinicie o servidor para ativar a recompra'; return; }
     const L = all.filter(x => x.comprar > 0), semC = all.filter(x => x.dec === 'avaliar').length;
     $('#arpR').textContent = `· ${num(L.length)} produto(s) para comprar · ${num(L.reduce((t, x) => t + x.comprar, 0))} un. · ${brl(L.reduce((t, x) => t + (x.valorCompra || 0), 0))}${semC ? ` · ${num(semC)} para avaliar (sem custo)` : ''}`;
   };
