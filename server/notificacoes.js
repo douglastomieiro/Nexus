@@ -12,7 +12,6 @@ const parse = s => { try { return JSON.parse(s); } catch { return null; } };
 const TIPO_REC = { returns: 'Devolução', mediations: 'Mediação', cancel_purchase: 'Cancelamento', fulfillment: 'Reclamação (Full)' };
 const SP_ABERTA = new Set(['REQUESTED', 'PROCESSING', 'JUDGING', 'SELLER_DISPUTE']);
 const iso = d => { const t = d ? new Date(d) : null; return t && !isNaN(t) ? t.toISOString() : null; }; // datas do ML vêm com fuso -04:00; a lista ordena em UTC
-const ML_VENDA = id => `https://www.mercadolivre.com.br/vendas/${id}/detalhe`;
 
 function mercadoLivre(loja, itens) {
   const nome = LOJAS[loja]?.nome || loja;
@@ -24,7 +23,7 @@ function mercadoLivre(loja, itens) {
   for (const r of all(`SELECT chave, body FROM raw WHERE loja=? AND recurso='question' AND status=200 AND ${ids ? '1' : `json_extract(body,'$.status')='UNANSWERED'`}`, loja)) {
     if (ids && !ids.has(r.chave)) continue;
     const q = parse(r.body); if (!q) continue;
-    itens.push({ id: `q:${loja}:${r.chave}`, tipo: 'pergunta', canal: 'ml', loja, nomeLoja: nome, data: iso(q.date_created), titulo: titulo(q.item_id), texto: q.text, link: 'https://www.mercadolivre.com.br/perguntas/vendedor' });
+    itens.push({ id: `q:${loja}:${r.chave}`, tipo: 'pergunta', canal: 'ml', loja, nomeLoja: nome, data: iso(q.date_created), titulo: titulo(q.item_id), texto: q.text, link: '#atendimento:perguntas' });
   }
 
   // mensagens pós-venda não lidas: a última mensagem do comprador em cada conversa
@@ -34,7 +33,7 @@ function mercadoLivre(loja, itens) {
     const msgs = getRaw(loja, 'messages_pack', pack)?.body?.messages || [];
     const ult = msgs.filter(m => String(m.from?.user_id) !== String(unread.user_id)).sort((a, b) => String(b.message_date?.created).localeCompare(String(a.message_date?.created)))[0];
     itens.push({ id: `m:${loja}:${pack}:${ult?.id || x.count || 1}`, tipo: 'mensagem', canal: 'ml', loja, nomeLoja: nome, data: iso(ult?.message_date?.created),
-      titulo: `Mensagem do comprador · venda ${pack}`, texto: ult?.text || `${x.count || 1} mensagem(ns) não lida(s)`, link: ML_VENDA(pack) });
+      titulo: `Mensagem do comprador · venda ${pack}`, texto: ult?.text || `${x.count || 1} mensagem(ns) não lida(s)`, link: `#atendimento:mensagens:${loja}:${pack}` });
   }
 
   // reclamações abertas
@@ -42,7 +41,7 @@ function mercadoLivre(loja, itens) {
     const c = parse(r.body); if (!c) continue;
     const motivo = getRaw(loja, 'claim_reason', c.reason_id)?.body?.detail;
     itens.push({ id: `c:${loja}:${r.chave}`, tipo: 'reclamacao', canal: 'ml', loja, nomeLoja: nome, data: iso(c.date_created),
-      titulo: `${TIPO_REC[c.type] || 'Reclamação'} aberta · venda ${c.resource_id}`, texto: motivo || c.reason_id || '', link: ML_VENDA(c.resource_id) });
+      titulo: `${TIPO_REC[c.type] || 'Reclamação'} aberta · venda ${c.resource_id}`, texto: motivo || c.reason_id || '', link: `#atendimento:reclamacoes:${loja}:${r.chave}` });
   }
 }
 

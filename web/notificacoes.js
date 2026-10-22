@@ -71,7 +71,7 @@ a.ni:hover{background:var(--row)}
     }
   };
 
-  const linha = (i, novo, tag = 'a') => `<${tag} class="ni${novo ? ' novo' : ''}" style="--c:${COR[i.tipo] || '#64748b'}"${tag === 'a' ? ` href="${esc(i.link)}" target="_blank" rel="noopener"` : ''} data-id="${esc(i.id)}">
+  const linha = (i, novo, tag = 'a') => `<${tag} class="ni${novo ? ' novo' : ''}" style="--c:${COR[i.tipo] || '#64748b'}"${tag === 'a' ? ` href="${esc(i.link)}"${/^https?:/.test(i.link) ? ' target="_blank" rel="noopener"' : ''}` : ''} data-id="${esc(i.id)}">
     <i>${ICO[i.tipo] || ICO.sino}</i><div><small><span>${NOME[i.tipo] || ''} · ${canal(i)}</span><span>${quando(i.data)}</span></small><b>${esc(i.titulo)}</b>${i.texto ? `<p>${esc(i.texto)}</p>` : ''}</div></${tag}>`;
 
   const winTxt = () => !('Notification' in window) ? 'Windows: navegador sem suporte'
@@ -97,7 +97,7 @@ a.ni:hover{background:var(--row)}
       const a = e.target.closest('[data-a]'); if (a?.dataset.a === 'som') { grava('notifSom', somLigado() ? '0' : '1'); desenhaPainel(novos); }
       if (a?.dataset.a === 'vendas') { grava('notifVendas', vendasLigado() ? '0' : '1'); desenhaPainel(novos); }
       if (a?.dataset.a === 'win') { try { await Notification.requestPermission(); } catch {} desenhaPainel(novos); }
-      if (e.target.closest('a[href="#atendimento"]')) fecha();
+      if (e.target.closest('a[href^="#"]')) fecha(); // item ou atalho que abre uma tela do sistema
     };
     // abrir o sino = ver tudo o que está na lista
     D.itens.forEach(i => vistos.add(i.id)); salvaVistos(); marca();

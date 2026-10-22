@@ -236,9 +236,9 @@ async function atendimento(c) {
   await pool([...new Set(claims.map(cl => cl.reason_id).filter(Boolean))], CONC, id =>
     c.fetchSave('claim_reason', id, `/post-purchase/v1/claims/reasons/${id}`, { maxAge: 30 * DIA }));
 
-  // mensagens pós-venda: só packs com mensagem não lida
+  // mensagens pós-venda: só packs com mensagem não lida (mark_as_read=false: a coleta não pode marcar como lida no ML)
   const packs = new Set(JSON.stringify(unread?.results || []).match(/packs\/(\d+)/g)?.map(s => s.slice(6)) || []);
-  await pool([...packs], CONC, pk => c.fetchSave('messages_pack', pk, `/messages/packs/${pk}/sellers/${u}?tag=post_sale`, { maxAge: 5 * MIN }));
+  await pool([...packs], CONC, pk => c.fetchSave('messages_pack', pk, `/messages/packs/${pk}/sellers/${u}?tag=post_sale&mark_as_read=false`, { maxAge: 5 * MIN }));
 }
 
 // ───────────── AVISOS (a cada minuto): vendas novas, perguntas sem resposta e mensagens não lidas (painel ao vivo e notificações) ─────────────
@@ -263,7 +263,7 @@ async function avisos(c) {
   if (completa) saveRaw(c.loja, 'avisos_perguntas', u, 'questions/search', 200, { ids, ts: Date.now() });
   const unread = await c.fetchSave('messages_unread', u, '/messages/unread?role=seller&tag=post_sale');
   const packs = new Set(JSON.stringify(unread?.results || []).match(/packs\/(\d+)/g)?.map(s => s.slice(6)) || []);
-  await pool([...packs], CONC, pk => c.fetchSave('messages_pack', pk, `/messages/packs/${pk}/sellers/${u}?tag=post_sale`, { maxAge: MIN }));
+  await pool([...packs], CONC, pk => c.fetchSave('messages_pack', pk, `/messages/packs/${pk}/sellers/${u}?tag=post_sale&mark_as_read=false`, { maxAge: MIN }));
 }
 
 // ───────────── PROMOÇÕES (diário) ─────────────

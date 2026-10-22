@@ -15,6 +15,8 @@ import { registrarFixos, fixosPorMes } from './custos-fixos.js';
 import { registrarFechamentos } from './dre-fechamentos.js';
 import { registrarNotificacoes } from './notificacoes.js';
 import { registrarPedido } from './pedido.js';
+import { registrarAcoes } from './acoes.js';
+import { registrarAtendimento } from './atendimento.js';
 import { registrarDescontos } from './descontos/rotas.js';
 import { registrarShopee, alertasShopee } from './shopee-rotas.js';
 import { registrarContas } from './contas-rotas.js';
@@ -160,7 +162,7 @@ app.get('/api/raw/doc', H(q => {
 }));
 
 // ── Lucro real, custos e configuração ──
-app.use(express.json());
+app.use(express.json({ limit: '30mb' })); // anexos de mensagem chegam em base64
 const lojasSel = q => (nomes[q.loja] ? [q.loja] : Object.keys(nomes));
 registrarPainel(app, { H, nomes, lojasSel, dias });
 registrarMetrics(app, { H, lojasSel, dias }); // Nexus Metrics › Meu negócio
@@ -226,6 +228,8 @@ registrarFixos(app, { H, nomes }); // Financeiro (DRE) › custos fixos do negó
 registrarFechamentos(app, { H }); // Financeiro (DRE) › fechamento mensal
 registrarNotificacoes(app, { H }); // sino de atendimento: perguntas, mensagens, reclamações e devoluções esperando resposta
 registrarPedido(app, { H, lojasSel }); // ficha completa do pedido e painel de vendas ao vivo
+registrarAcoes(app); // ações no ML (escrita) e histórico do que o sistema fez
+registrarAtendimento(app); // perguntas, mensagens, reclamações e respostas prontas, com ações
 app.get('/api/config', H(() => ({ ...getConfig(), auto: Object.fromEntries(Object.keys(nomes).map(l => { const a = aliquotaAuto(l); return [l, a && { cnpj: a.cnpj, nome: a.nome, anexo: a.anexo, meses: Object.entries(a.meses).slice(-6).map(([mes, v]) => ({ mes, ...v })) }]; })) })));
 app.post('/api/config', H((_, req) => { for (const k of [...Object.keys(nomes).map(l => 'aliquota_' + l), 'devolucao_perde_produto']) if (req.body[k] != null) {
     const v = Number(req.body[k]); if (!Number.isFinite(v) || v < 0 || v > 100) throw Object.assign(new Error(`valor inválido para ${k}`), { status: 400 });
