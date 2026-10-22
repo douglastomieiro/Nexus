@@ -49,7 +49,8 @@
   SUB.acoes = 'Tudo o que o sistema fez no Mercado Livre, com a resposta do ML';
   NOTA.acoes = 'As 300 ações mais recentes';
   const NOMES = { 'pergunta.responder': 'Respondeu pergunta', 'pergunta.apagar': 'Apagou pergunta', 'pergunta.bloquear': 'Bloqueou comprador', 'pergunta.desbloquear': 'Desbloqueou comprador',
-    'mensagem.enviar': 'Enviou mensagem', 'mensagem.anexo': 'Enviou anexo', 'reclamacao.anexo': 'Anexo na reclamação' };
+    'mensagem.enviar': 'Enviou mensagem', 'mensagem.anexo': 'Enviou anexo', 'reclamacao.anexo': 'Anexo na reclamação',
+    'reclamacao.return_review_ok': 'Devolução revisada: chegou bem', 'reclamacao.return_review_fail': 'Devolução revisada: problema' };
   VIEWS.acoes = async function () {
     const [H, C] = await Promise.all([getJ('api/acoes/historico?limite=300'), getJ('api/acoes/contas')]);
     const nome = t => NOMES[t] || (t.startsWith('reclamacao.') ? 'Reclamação: ' + t.slice(11).replace(/_/g, ' ') : t);
@@ -59,7 +60,7 @@
       <div class="box" id="ach">${H.length ? tbl([{ t: 'Quando', f: r => dt(r.quando) }, { t: 'Conta', f: r => esc(lojaTxt(r.loja)) }, { t: 'Ação', f: r => esc(nome(r.tipo)) }, { t: 'Alvo', f: r => esc(r.alvo) },
         { t: 'Resultado', f: r => r.ok ? `<span class="tag ok">${r.resposta?.simulado ? 'simulado' : 'ok'}</span>` : `<span class="tag bad" title="${esc(JSON.stringify(r.resposta))}">erro ${r.status || ''}</span>` },
         { t: 'Detalhe', f: r => r.tipo === 'pergunta.bloquear' && r.ok && !desbloqueado(r) ? `<button class="btn2" data-desb="${esc(r.loja)}|${esc(r.alvo)}">Desbloquear</button>`
-          : `<small style="color:var(--mut)">${esc(r.pedido?.corpo?.text || r.pedido?.corpo?.message || r.pedido?.arquivo || '').slice(0, 120)}</small>` }], H) : '<div class="empty"><b>Nenhuma ação ainda.</b>As ações feitas pelo sistema no Mercado Livre aparecem aqui.</div>'}</div>`;
+          : `<small style="color:var(--mut)">${esc(r.pedido?.corpo?.text || r.pedido?.corpo?.message || r.pedido?.corpo?.[0]?.message || r.pedido?.arquivo || '').slice(0, 120)}</small>` }], H) : '<div class="empty"><b>Nenhuma ação ainda.</b>As ações feitas pelo sistema no Mercado Livre aparecem aqui.</div>'}</div>`;
     // bloqueio de comprador desfeito por um desbloqueio mais novo (o histórico vem do mais novo para o mais antigo)
     function desbloqueado(r) { return H.some(d => d.id > r.id && d.ok && d.tipo === 'pergunta.desbloquear' && d.loja === r.loja && d.alvo === r.alvo); }
     $('#ach').onclick = async e => {

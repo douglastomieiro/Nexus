@@ -31,6 +31,23 @@ const anuncio = (loja, item) => { const a = anuncios()[loja + ':' + item] || {},
   const tit = a.titulo || parse(db.prepare(`SELECT body FROM raw WHERE loja=? AND recurso='item' AND chave=?`).get(loja, item)?.body || 'null')?.title || item;
   return { id: item, titulo: tit, thumb: a.thumb || null, preco: a.preco ?? null, estoque: a.estoque ?? null, lg: a.lg || null, link: a.link || null, status: a.status || null, margem30: mg.margem ?? null, vendidos30: mg.unidades ?? 0, semCusto: !!mg.semCusto }; };
 
+// perda real de cada venda devolvida ou cancelada nos últimos 180 dias (o mesmo cálculo da tela Devoluções), por conta:pedido
+const r2 = v => Math.round((v || 0) * 100) / 100;
+let cachePd = { t: 0, m: {} };
+const perdas = () => {
+  if (Date.now() - cachePd.t < 120e3) return cachePd.m;
+  const m = {}; try { for (const d of calcular({ lojas: Object.keys(LOJAS), desde: addDias(hoje(), -179) }).devolucoes) m[d.loja + ':' + d.id] = d; } catch (e) { console.error('[atendimento] perdas:', e.message); }
+  cachePd = { t: Date.now(), m }; return m;
+};
+// quanto a reclamação custou: a conta final quando o reembolso já saiu; antes disso, só o frete de volta que o ML vai cobrar
+const contaPerda = (loja, pedido, claim) => {
+  const d = perdas()[loja + ':' + pedido];
+  if (d) return { final: true, reembolsado: r2(d.reembolsado), reembolsoPor: d.reembolsoPor || '', freteIda: r2(d.freteIda), freteVolta: r2(d.freteVolta), tarifas: r2(d.tarifasPerdidas), custoProduto: r2(d.custoProd),
+    mantida: !!d.mantida, resultadoMantido: r2(d.resultadoMantido), perda: r2(d.perda - (d.resultadoMantido || 0)), fonte: d.fonte, aguardandoEstorno: !!d.aguardandoEstorno };
+  const volta = getRaw(loja, 'claim_return_cost', claim)?.body?.amount;
+  return volta ? { final: false, freteVolta: r2(volta), perda: r2(volta) } : null;
+};
+
 // ───────── Perguntas ─────────
 const faixa = d => { const x = new Date(Date.parse(d) - 3 * 3600e3), dw = x.getUTCDay(), h = x.getUTCHours(); return dw === 0 || dw === 6 ? 'fds' : h >= 9 && h < 18 ? 'comercial' : 'fora'; };
 function perguntas(q) {
@@ -139,7 +156,17 @@ export const ACOES_REC = {
   allow_partial_refund: { txt: 'Oferecer reembolso parcial', caminho: 'expected-resolutions/partial-refund', percentual: true, perigo: 'O comprador recebe a parte do valor que você escolher, se aceitar.' },
   partial_refund: { txt: 'Oferecer reembolso parcial', caminho: 'expected-resolutions/partial-refund', percentual: true, perigo: 'O comprador recebe a parte do valor que você escolher, se aceitar.' },
   open_dispute: { txt: 'Pedir mediação do Mercado Livre', caminho: 'actions/open-dispute', perigo: 'O Mercado Livre passa a decidir o caso. Depois disso, as mensagens vão para o mediador.' },
+  return_review_ok: { txt: 'Produto devolvido chegou bem', revisao: 'ok', perigo: 'Você confirma ao Mercado Livre que o produto voltou em boas condições. O reembolso ao comprador segue e não dá para contestar depois.' },
+  return_review_fail: { txt: 'Reportar problema no produto devolvido', revisao: 'falha' },
 };
+// motivos da revisão com problema (POST /returns/{id}/return-review); o ML pede foto para SRF2 e SRF4
+const MOTIVOS_REV = { SRF2: 'O produto chegou danificado', SRF3: 'A devolução está incompleta', SRF4: 'Devolveram um produto diferente do que enviei', SRF5: 'O produto não está no pacote', SRF6: 'Outro problema no produto', SRF7: 'A devolução ainda não chegou' };
+const FOTO_OBRIGATORIA = new Set(['SRF2', 'SRF4']);
+const DEV_ST = { pending: 'Criando o envio', label_generated: 'Etiqueta pronta: o comprador ainda não postou', scheduled: 'Coleta agendada', shipped: 'A caminho', pending_delivered: 'Chegando', delivered: 'Entregue',
+  not_delivered: 'Não entregue', return_to_buyer: 'Voltando para o comprador', cancelled: 'Cancelada', expired: 'Expirou: o comprador não postou', failed: 'Falhou', pending_cancel: 'Cancelando', pending_expiration: 'Expirando', pending_failure: 'Falhando' };
+const ENV_ST = { pending: 'criado', ready_to_ship: 'pronto para postar', shipped: 'a caminho', not_delivered: 'não entregue', delivered: 'entregue', cancelled: 'cancelado' };
+const DINHEIRO = { retained: 'retido pelo Mercado Livre', refunded: 'devolvido ao comprador', available: 'liberado para você' };
+const REEMB = { shipped: 'quando o comprador postar o produto', delivered: '3 dias depois de o produto chegar', 'n/a': 'sem devolução do produto (baixo valor)' };
 const acoesDe = c => (c?.players || []).find(p => p.role === 'respondent')?.available_actions || [];
 function reclamacoes(q) {
   const desde = Date.now() - (Math.min(Math.max(parseInt(q.dias) || 60, 1), 365)) * 864e5, out = [];
@@ -153,9 +180,36 @@ function reclamacoes(q) {
       acoes: ac.map(a => ({ acao: a.action, txt: ACOES_REC[a.action]?.txt || a.action, obrigatoria: !!a.mandatory, prazo: iso(a.due_date) })),
       afetaReputacao: af && typeof af === 'object' ? !!(af.affects_reputation ?? af.affectsReputation) : null,
       resolucao: c.resolution ? (c.resolution.reason || c.resolution.benefited?.join?.(', ') || 'resolvida') : null,
-      produto: o?.order_items?.[0]?.item?.title || null, thumb: anuncios()[r.loja + ':' + o?.order_items?.[0]?.item?.id]?.thumb || null, valor: o?.total_amount ?? null, comprador: o?.buyer?.nickname || null });
+      produto: o?.order_items?.[0]?.item?.title || null, thumb: anuncios()[r.loja + ':' + o?.order_items?.[0]?.item?.id]?.thumb || null, valor: o?.total_amount ?? null, comprador: o?.buyer?.nickname || null,
+      perda: contaPerda(r.loja, String(c.resource_id), c.id) });
   }
   return out.sort((a, b) => b.aberta - a.aberta || String(a.prazo || '9').localeCompare(String(b.prazo || '9')) || String(b.data).localeCompare(String(a.data)));
+}
+// produtos com mais reclamações no período (sem cancelamentos de compra), com a perda real e a taxa sobre as vendas
+const NAO_DEVOLUCAO = new Set(['cancel_purchase', 'cancel_sale']);
+let cacheVd = { k: '', t: 0, v: {} };
+function rankingReclamacoes(q) {
+  const dias = Math.min(Math.max(parseInt(q.dias) || 60, 7), 365), desde = Date.now() - dias * 864e5;
+  if (cacheVd.k !== String(dias) || Date.now() - cacheVd.t > 120e3) {
+    const v = {}; try { for (const p of calcular({ lojas: Object.keys(LOJAS), desde: addDias(hoje(), -(dias - 1)) }).porItem) v[p.loja + ':' + p.item] = (v[p.loja + ':' + p.item] || 0) + p.unidades; } catch (e) { console.error('[atendimento] ranking:', e.message); }
+    cacheVd = { k: String(dias), t: Date.now(), v };
+  }
+  const P = {}, an = anuncios(), vistos = new Set();
+  for (const r of db.prepare(`SELECT loja, chave, body FROM raw WHERE recurso='claim' AND status=200`).all()) {
+    if (!LOJAS[r.loja]) continue; const c = parse(r.body);
+    if (!c || NAO_DEVOLUCAO.has(c.type) || !(Date.parse(c.date_created) >= desde)) continue;
+    const o = parse(db.prepare(`SELECT body FROM raw WHERE loja=? AND recurso='order' AND chave=?`).get(r.loja, String(c.resource_id))?.body || 'null');
+    const mo = getRaw(r.loja, 'claim_reason', c.reason_id)?.body?.detail || c.reason_id;
+    (o?.order_items || []).forEach((i, n) => {
+      const k = r.loja + ':' + i.item.id, x = P[k] ||= { loja: r.loja, nomeLoja: LOJAS[r.loja].nome, item: i.item.id, titulo: an[k]?.titulo || i.item.title, thumb: an[k]?.thumb || null, reclamacoes: 0, unidades: 0, perda: 0, motivos: {} };
+      x.reclamacoes++; x.unidades += i.quantity || 1; if (mo) x.motivos[mo] = (x.motivos[mo] || 0) + 1;
+      // a perda é da venda inteira: entra uma vez só, no primeiro item
+      if (n === 0 && !vistos.has(r.loja + ':' + c.resource_id)) { vistos.add(r.loja + ':' + c.resource_id); x.perda += contaPerda(r.loja, String(c.resource_id), c.id)?.perda || 0; }
+    });
+  }
+  return { dias, lista: Object.values(P).map(({ motivos, ...x }) => { const v = cacheVd.v[x.loja + ':' + x.item] || 0;
+    return { ...x, perda: r2(x.perda), vendidos: v, taxa: v + x.unidades ? x.unidades / (v + x.unidades) : null, motivo: Object.entries(motivos).sort((a, b) => b[1] - a[1])[0]?.[0] || null }; })
+    .sort((a, b) => b.reclamacoes - a.reclamacoes || b.perda - a.perda).slice(0, 15) };
 }
 async function reclamacao(loja, id) {
   lojaOk(loja); if (!/^\d+$/.test(String(id))) throw erro('Reclamação inválida.');
@@ -168,11 +222,30 @@ async function reclamacao(loja, id) {
   // mensagens e resoluções: sem leitura ao vivo, a última cópia coletada
   const m = m0.status === 200 ? m0 : guardado('claim_messages'), e = e0.status === 200 ? e0 : guardado('claim_expected-resolutions');
   if (!cl) throw erro('Não consegui ler esta reclamação no Mercado Livre agora.', 502);
+  // devolução do produto: envio de volta, dinheiro, revisão (GET v2/claims/{id}/returns)
+  let dev = null;
+  if (cl.type === 'returns' || (cl.related_entities || []).includes('return')) {
+    const rr = SIMULADO ? guardado('claim_returns') : await mlGet(loja, `/post-purchase/v2/claims/${id}/returns`);
+    if (rr.status === 200 && rr.body?.id && !SIMULADO) saveRaw(loja, 'claim_returns', id, `/post-purchase/v2/claims/${id}/returns`, 200, rr.body);
+    dev = rr.status === 200 && rr.body?.id ? rr.body : getRaw(loja, 'claim_returns', id)?.body?.id ? getRaw(loja, 'claim_returns', id).body : null;
+  }
+  // motivos para reportar problema no produto devolvido (os do ML; sem leitura, a lista conhecida)
+  let motivosRevisao = null;
+  if (acoesDe(cl).some(a => a.action === 'return_review_fail')) {
+    const mr = SIMULADO ? { status: 0 } : await mlGet(loja, `/post-purchase/v1/returns/reasons?flow=seller_return_failed&claim_id=${id}`);
+    const L = mr.status === 200 && Array.isArray(mr.body) && mr.body.length ? mr.body.filter(x => (x.apply || ['order']).includes('order') || x.id === 'SRF7').sort((a, b) => (a.position || 0) - (b.position || 0)).map(x => ({ id: x.id, txt: MOTIVOS_REV[x.id] || x.detail || x.id }))
+      : Object.entries(MOTIVOS_REV).map(([k, t]) => ({ id: k, txt: t }));
+    motivosRevisao = L.map(x => ({ ...x, foto: FOTO_OBRIGATORIA.has(x.id) }));
+  }
   const QUEM = { complainant: 'Comprador', respondent: 'Você', mediator: 'Mercado Livre' };
   return { loja, nomeLoja: LOJAS[loja].nome, id: String(id), aoVivo: c.status === 200, tipo: TIPO[cl.type] || cl.type, etapa: ETAPA[cl.stage] || cl.stage, aberta: cl.status === 'opened', pedido: String(cl.resource_id),
     motivo: getRaw(loja, 'claim_reason', cl.reason_id)?.body?.detail || cl.reason_id, data: iso(cl.date_created),
     acoes: acoesDe(cl).map(a => ({ acao: a.action, txt: ACOES_REC[a.action]?.txt || a.action, conhecida: !!ACOES_REC[a.action], perigo: ACOES_REC[a.action]?.perigo || null, mensagem: !!ACOES_REC[a.action]?.msg,
-      percentual: !!ACOES_REC[a.action]?.percentual, obrigatoria: !!a.mandatory, prazo: iso(a.due_date) })),
+      percentual: !!ACOES_REC[a.action]?.percentual, revisao: ACOES_REC[a.action]?.revisao || null, obrigatoria: !!a.mandatory, prazo: iso(a.due_date) })),
+    perda: contaPerda(loja, String(cl.resource_id), id), motivosRevisao,
+    devolucao: dev ? { id: String(dev.id), status: DEV_ST[dev.status] || dev.status, dinheiro: DINHEIRO[dev.status_money] || dev.status_money || null, reembolso: REEMB[dev.refund_at] || dev.refund_at || null,
+      envios: (dev.shipments || []).map(s => ({ status: ENV_ST[s.status] || s.status, rastreio: s.tracking_number || null, para: s.destination?.name === 'warehouse' ? 'depósito do Mercado Livre (revisão)' : s.destination?.name === 'seller_address' ? 'seu endereço' : s.destination?.name || '',
+        de: s.type === 'return_from_triage' ? 'depósito do Mercado Livre' : 'comprador' })), revisada: (dev.related_entities || []).includes('reviews'), fechada: iso(dev.date_closed) } : null,
     mensagens: (m.status === 200 && Array.isArray(m.body) ? m.body : []).map(x => ({ de: QUEM[x.sender_role] || x.sender_role, para: QUEM[x.receiver_role] || x.receiver_role, texto: x.message, data: iso(x.message_date || x.date_created),
       anexos: (x.attachments || []).map(a => a.original_filename || a.filename), moderada: x.message_moderation?.status === 'rejected' })).sort((a, b) => String(a.data).localeCompare(String(b.data))),
     resolucoesEsperadas: e.status === 200 ? e.body : null, resolucao: cl.resolution || null, link: `https://www.mercadolivre.com.br/vendas/${cl.resource_id}/detalhe` };
@@ -184,7 +257,21 @@ async function acaoReclamacao(b) {
   const atual = SIMULADO ? { status: 200, body: getRaw(loja, 'claim', id)?.body } : await mlGet(loja, `/post-purchase/v1/claims/${id}`);
   if (atual.status !== 200) throw erro('Não consegui conferir a reclamação no Mercado Livre agora. Tente de novo.', 502);
   if (!acoesDe(atual.body).some(a => a.action === b.acao)) throw erro('O Mercado Livre não libera mais essa ação nesta reclamação. Atualize a tela.');
-  if (A.msg) {
+  if (A.revisao) {
+    // a revisão é feita na devolução (return_id), não na reclamação
+    const rr = SIMULADO ? { status: 200, body: getRaw(loja, 'claim_returns', id)?.body || { id: 'simulado' } } : await mlGet(loja, `/post-purchase/v2/claims/${id}/returns`);
+    const rid = rr.status === 200 && rr.body?.id; if (!rid) throw erro('Não achei a devolução desta reclamação no Mercado Livre. Tente de novo.', 502);
+    if (A.revisao === 'ok') await acaoML(loja, `reclamacao.${b.acao}`, id, 'POST', `/post-purchase/v1/returns/${rid}/return-review`, {});
+    else {
+      const motivo = String(b.motivo || ''), texto = sp(b.mensagem).trim();
+      if (!MOTIVOS_REV[motivo] && !/^SRF\d+$/.test(motivo)) throw erro('Escolha qual é o problema.');
+      if (!texto) throw erro('Descreva o problema para o Mercado Livre.');
+      if (FOTO_OBRIGATORIA.has(motivo) && !b.anexos?.length) throw erro('Para esse problema o Mercado Livre pede pelo menos uma foto.');
+      const anexos = [];
+      for (const a of (b.anexos || []).slice(0, 5)) { const r = await enviaArquivo(loja, 'reclamacao.anexo', id, `/post-purchase/v1/claims/${id}/returns/attachments`, a); anexos.push(r.file_name || r.filename); }
+      await acaoML(loja, `reclamacao.${b.acao}`, id, 'POST', `/post-purchase/v1/returns/${rid}/return-review`, [{ reason: motivo, message: texto, ...(anexos.length ? { attachments: anexos } : {}) }]);
+    }
+  } else if (A.msg) {
     const texto = sp(b.mensagem).trim(); if (!texto) throw erro('Escreva a mensagem.');
     const anexos = [];
     for (const a of (b.anexos || []).slice(0, 5)) anexos.push((await enviaArquivo(loja, 'reclamacao.anexo', id, `/post-purchase/v1/claims/${id}/attachments`, a)).filename);
@@ -225,6 +312,7 @@ export function registrarAtendimento(app) {
   app.get('/api/at/conversa', HA(q => conversa(String(q.loja || ''), String(q.pack || ''))));
   app.post('/api/at/mensagens/enviar', HA((_, req) => enviaMensagem(req.body || {})));
   app.get('/api/at/reclamacoes', HA(q => reclamacoes(q)));
+  app.get('/api/at/reclamacoes/ranking', HA(q => rankingReclamacoes(q)));
   app.get('/api/at/reclamacao', HA(q => reclamacao(String(q.loja || ''), String(q.id || ''))));
   app.post('/api/at/reclamacoes/acao', HA((_, req) => acaoReclamacao(req.body || {})));
   app.get('/api/at/respostas', HA(() => lerRespostas()));

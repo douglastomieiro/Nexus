@@ -28,7 +28,11 @@
 .atm-m.comprador{background:var(--hov);align-self:flex-start}.atm-m.voce{background:var(--ac2);align-self:flex-end}.atm-m.mod{opacity:.6;text-decoration:line-through}
 .atm-w{border-top:1px solid var(--line);padding:10px 14px}
 .atr{cursor:pointer}.atr td{vertical-align:middle}.atr .tag{margin:1px 2px}
-@media(max-width:980px){.atq{grid-template-columns:1fr}.atm{grid-template-columns:1fr}.atm-l{max-height:260px}}
+.atm.f3{grid-template-columns:300px minmax(0,1fr) 300px}
+.atm-x{background:var(--panel);border:1px solid var(--bd);border-radius:12px;max-height:72vh;overflow:auto;padding:12px 14px}.atm-x .fc-sec{margin-bottom:10px}
+.atm-x .fc-top b{font-size:13px;color:var(--tx1)}.atm-x .fl b{overflow-wrap:anywhere}
+@media(max-width:1400px){.atm.f3{grid-template-columns:300px minmax(0,1fr)}.atm.f3 .atm-x{grid-column:1/-1;max-height:none}}
+@media(max-width:980px){.atq{grid-template-columns:1fr}.atm,.atm.f3{grid-template-columns:1fr}.atm-l{max-height:260px}}
 </style>`);
 
   SUB.atendimento = 'Perguntas, mensagens e reclamações respondidas aqui, sem entrar no Mercado Livre';
@@ -42,6 +46,11 @@
   let RESP = null;
   const respostas = async () => RESP ||= await getJ('api/at/respostas');
   const opcoesResp = (uso) => (RESP || []).filter(r => r.uso === 'ambos' || r.uso === uso).map(r => `<option value="${esc(r.id)}">${esc(r.titulo)}</option>`).join('');
+  const fl = (t, v, cls = '') => `<div class="fl ${cls}"><span>${t}</span><b>${v}</b></div>`;
+  const neg = v => (v ? `− ${brl(Math.abs(v))}` : brl(0));
+  // perda real: positiva é prejuízo; negativa, a venda mantida pelo ML rendeu mais do que custou
+  const perdaTxt = v => v > 0.004 ? `<span class="bad">− ${brl(v)}</span>` : v < -0.004 ? `<span class="ok">+ ${brl(-v)}</span>` : brl(0);
+  const negrito = t => t.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'); // o assistente do ML escreve em markdown
   const contador = (ta, el, max) => { const f = () => { el.textContent = `${ta.value.length}/${max}`; el.style.color = ta.value.length > max ? 'var(--bad)' : ''; }; ta.addEventListener('input', f); f(); };
 
   VIEWS.atendimento = async function (arg) {
@@ -111,7 +120,7 @@
   async function telaMensagens(loja, pack) {
     const L = await getJ('api/at/mensagens');
     $('#atv').innerHTML = `<div class="atm"><div class="atm-l"><div style="padding:8px"><input id="amq" placeholder="Buscar comprador, produto ou nº" style="width:100%"></div><div id="aml"></div></div>
-      <div class="atm-c" id="amc"><div class="empty" style="margin:auto"><b>Escolha uma conversa</b>As não lidas ficam no topo. As mensagens novas chegam a cada minuto.</div></div></div>`;
+      <div class="atm-c" id="amc"><div class="empty" style="margin:auto"><b>Escolha uma conversa</b>As não lidas ficam no topo. As mensagens novas chegam a cada minuto.</div></div><div class="atm-x" id="amx" hidden></div></div>`;
     const lista = () => { const q = $('#amq').value.toLowerCase();
       $('#aml').innerHTML = L.filter(c => !q || [c.comprador, c.titulo, c.pack, c.pedido].join(' ').toLowerCase().includes(q)).map(c => `<a class="atm-i${c.naoLidas ? ' nl' : ''}${c.loja === loja && c.pack === pack ? ' on' : ''}" href="#atendimento:mensagens:${esc(c.loja)}:${esc(c.pack)}">
         ${c.thumb ? `<img src="${esc(c.thumb)}" alt="">` : '<span class="th"></span>'}<div><b>${esc(c.comprador || 'Comprador')}<small>${c.ultima?.data ? quando(c.ultima.data) : ''}</small></b><span>${esc(c.titulo || 'venda ' + c.pack)}</span>
@@ -147,6 +156,27 @@
       };
     };
     desenha();
+    fichaLado(C.loja, P);
+  }
+  // ficha resumida da venda ao lado da conversa: itens, envio, nota, resultado e devolução
+  async function fichaLado(loja, P) {
+    const x = $('#amx'); if (!x) return;
+    if (!P?.pedido) { x.hidden = true; x.parentElement.classList.remove('f3'); return; }
+    x.hidden = false; x.parentElement.classList.add('f3'); x.innerHTML = '<p style="color:var(--mut)">Carregando a venda…</p>';
+    let F; try { F = await getJ(`api/pedido?loja=${encodeURIComponent(loja)}&id=${encodeURIComponent(P.pedido)}`); } catch (e) { if (e === STALE) return; x.innerHTML = `<div class="note">${esc(e.message)}</div>`; return; }
+    if ($('#amx') !== x) return;
+    const C = F.conta, E = F.envio, N = F.nota, D = F.devolucao;
+    x.innerHTML = `<div class="fc-top"><b>Venda ${esc(F.id)}</b><span class="tag ${F.cancelado ? 'bad' : ''}">${esc(F.status)}</span><small style="color:var(--mut)">${quando(F.data)}</small></div>
+      <div class="fc-sec"><h5>Itens${P.itens > 1 ? ` (${P.itens} pedidos no pacote)` : ''}</h5>${F.itens.map(i => `<div class="fc-it">${i.thumb ? `<img src="${esc(i.thumb)}" alt="">` : '<span class="th"></span>'}<div style="min-width:0"><b>${esc(i.titulo)}</b>
+        <small>${num(i.qtd)} × ${brl(i.preco)}${i.sku ? ` · SKU ${esc(i.sku)}` : ''}</small>${i.variacao ? `<small>${esc(i.variacao)}</small>` : ''}</div></div>`).join('')}</div>
+      ${E ? `<div class="fc-sec"><h5>Envio</h5>${fl('Situação', esc(E.status || '—'))}${E.logistica ? fl('Logística', esc(E.logistica)) : ''}${E.rastreio ? fl('Rastreio', esc(E.rastreio)) : ''}
+        ${E.prazoEntrega ? fl('Entrega prevista', quando(E.prazoEntrega)) : ''}${E.atraso ? '<div class="fc-nota bad">Envio atrasado.</div>' : ''}</div>` : ''}
+      <div class="fc-sec"><h5>Nota fiscal</h5>${N ? `${fl('Nota', `${esc(N.numero || '')} · ${esc(N.status)}`)}${N.frete ? fl('Frete na nota', brl(N.frete)) : ''}` : '<small style="color:var(--mut)">Sem nota coletada.</small>'}</div>
+      ${C ? `<div class="fc-sec"><h5>Resultado</h5>${fl('Total da venda', brl(C.receita))}${fl('(=) Repasse do ML', brl(C.repasse), 'sub')}${fl('(−) Custo dos produtos', C.flags.includes('sem custo') ? '<small class="warn">sem custo</small>' : neg(C.custo))}
+        ${fl('(−) Imposto', neg(C.imposto))}${C.ads ? fl('(−) Ads', neg(C.ads)) : ''}${fl('(=) Resultado', `<span class="${C.lucro < 0 ? 'bad' : 'ok'}">${brl(C.lucro)}</span>`, 'tot')}${fl('Margem', mgPill(C.margem, C.flags.includes('sem custo')))}</div>` : ''}
+      ${D ? `<div class="fc-sec"><h5>Devolução</h5>${fl('Reembolsado', brl(D.reembolsado))}${fl('(=) Perda real', perdaTxt(D.perda - (D.resultadoMantido || 0)), 'tot')}</div>` : ''}
+      ${F.reclamacoes.length ? `<div class="fc-sec"><h5>Reclamações</h5>${F.reclamacoes.map(r => `<div class="fl"><span><a class="lk" href="#atendimento:reclamacoes:${esc(loja)}:${esc(r.id)}">${esc(r.tipo)}</a> <small>${quando(r.data)}</small></span><b>${esc(r.status)}</b></div>`).join('')}</div>` : ''}
+      <a class="btn2" href="#" data-ficha="${esc(loja)}|${esc(F.id)}" style="text-decoration:none;display:inline-flex">${ic('pedidos', 13)}Ficha completa</a>`;
   }
 
   // ───────── Reclamações e devoluções ─────────
@@ -154,22 +184,40 @@
   async function telaReclamacoes(loja, id) {
     const L = await getJ('api/at/reclamacoes?dias=60'), ab = L.filter(x => x.aberta);
     const urg = ab.filter(x => x.prazo && Date.parse(x.prazo) - Date.now() < 864e5).length;
+    const perdaTot = L.reduce((t, x) => t + (x.perda?.final ? x.perda.perda : 0), 0);
     $('#atv').innerHTML = `<div class="kgrid">${kpi('Abertas', num(ab.length), 'esperando você ou o comprador', 'devolucoes', ab.length ? 'red' : 'green')}${kpi('Prazo vencendo', num(urg), 'ação do vendedor em menos de 24 h', 'alertas', urg ? 'red' : 'slate')}
-        ${kpi('Em mediação', num(ab.filter(x => /Media/.test(x.etapa)).length), 'o Mercado Livre decide', 'reputacao', 'amber')}${kpi('Encerradas (60 dias)', num(L.length - ab.length), '', 'ok', 'slate')}</div>
+        ${kpi('Em mediação', num(ab.filter(x => /Media/.test(x.etapa)).length), 'o Mercado Livre decide', 'reputacao', 'amber')}${kpi('Encerradas (60 dias)', num(L.length - ab.length), '', 'ok', 'slate')}
+        ${kpi('Resultado das reclamações', perdaTxt(perdaTot), 'perdas de frete, tarifas e produto menos o que o ML pagou nas vendas mantidas', 'devolucoes', perdaTot > 0 ? 'red' : 'green')}</div>
       <div class="chips" id="arf"><span class="chip${FR.so === 'abertas' ? ' on' : ''}" data-v="abertas">Abertas</span><span class="chip${FR.so === 'todas' ? ' on' : ''}" data-v="todas">Todas (60 dias)</span></div>
-      <div class="box"><div class="tw" style="max-height:none"><table class="rt"><thead><tr><th>Aberta em</th><th>Produto</th><th>Tipo / etapa</th><th>Motivo</th><th class="n">Valor</th><th>Prazo</th><th>Ações liberadas</th></tr></thead><tbody id="arb"></tbody></table></div></div>`;
+      <div class="box"><div class="tw" style="max-height:none"><table class="rt"><thead><tr><th>Aberta em</th><th>Produto</th><th>Tipo / etapa</th><th>Motivo</th><th class="n">Valor</th><th class="n">Perda</th><th>Prazo</th><th>Ações liberadas</th></tr></thead><tbody id="arb"></tbody></table></div></div>
+      <div class="box" id="ark"><div class="boxh"><h3>Produtos com mais reclamações (60 dias)</h3><small>Sem os cancelamentos de compra. Taxa = unidades reclamadas sobre as vendidas.</small></div><p style="color:var(--mut)">Calculando…</p></div>`;
     const desenha = () => { const V = FR.so === 'abertas' ? ab : L;
       $('#arb').innerHTML = V.map(x => `<tr class="atr" data-k="${esc(x.loja)}|${esc(x.id)}"><td>${quando(x.data)}<br><small style="color:var(--mut)">${esc(x.nomeLoja)}</small></td>
         <td><div class="pr">${thumb(x.thumb)}<div><b>${esc(x.produto || 'venda ' + x.pedido)}</b><small>${esc(x.comprador || '')} · venda ${esc(x.pedido)}</small></div></div></td>
         <td>${esc(x.tipo)}<br><small style="color:var(--mut)">${x.aberta ? esc(x.etapa) : 'encerrada'}${x.afetaReputacao ? ' · <span class="bad">afeta reputação</span>' : ''}</small></td><td><small>${esc(x.motivo || '')}</small></td>
-        <td class="n">${x.valor != null ? brl(x.valor) : '—'}</td><td>${x.prazo ? `<span class="${Date.parse(x.prazo) - Date.now() < 864e5 ? 'bad' : ''}">${quando(x.prazo)}</span>` : '—'}</td>
+        <td class="n">${x.valor != null ? brl(x.valor) : '—'}</td><td class="n">${x.perda ? x.perda.final ? perdaTxt(x.perda.perda) : `<small title="Frete de volta que o ML vai cobrar; a conta final aparece quando o reembolso sair">prev. ${brl(x.perda.perda)}</small>` : '—'}</td><td>${x.prazo ? `<span class="${Date.parse(x.prazo) - Date.now() < 864e5 ? 'bad' : ''}">${quando(x.prazo)}</span>` : '—'}</td>
         <td>${x.aberta ? x.acoes.map(a => `<span class="tag${a.obrigatoria ? ' warn' : ''}">${esc(a.txt)}</span>`).join('') || '<small style="color:var(--mut)">nenhuma agora</small>' : ''}</td></tr>`).join('')
-        || '<tr><td colspan="7" class="empty">Nenhuma reclamação aqui.</td></tr>'; };
+        || '<tr><td colspan="8" class="empty">Nenhuma reclamação aqui.</td></tr>'; };
     $('#arf').onclick = e => { const c = e.target.closest('.chip'); if (!c) return; FR.so = c.dataset.v; document.querySelectorAll('#arf .chip').forEach(x => x.classList.toggle('on', x === c)); desenha(); };
     $('#arb').onclick = e => { const tr = e.target.closest('tr[data-k]'); if (tr && !e.target.closest('a')) { const [l, i] = tr.dataset.k.split('|'); abreReclamacao(l, i); } };
     desenha();
     if (loja && id) abreReclamacao(loja, id);
+    // ranking por último: o cálculo das vendas do período é o mais demorado
+    getJ('api/at/reclamacoes/ranking?dias=60').then(K => { const b = $('#ark'); if (!b) return;
+      b.innerHTML = `${b.querySelector('.boxh').outerHTML}${K.lista.length ? `<div class="tw" style="max-height:none"><table class="rt"><thead><tr><th>Produto</th><th class="n">Reclamações</th><th class="n">Unidades</th><th class="n">Vendidas</th><th class="n">Taxa</th><th>Motivo mais comum</th><th class="n">Perda real</th></tr></thead><tbody>
+        ${K.lista.map(x => `<tr><td><div class="pr">${thumb(x.thumb)}<div><b>${esc(x.titulo)}</b><small>${esc(x.nomeLoja)} · ${esc(x.item)}</small></div></div></td><td class="n">${num(x.reclamacoes)}</td><td class="n">${num(x.unidades)}</td><td class="n">${num(x.vendidos)}</td>
+          <td class="n"><span class="${x.taxa > 0.1 ? 'bad' : x.taxa > 0.04 ? 'warn' : ''}">${x.taxa == null ? '—' : pc(x.taxa, 1)}</span></td><td><small>${esc(x.motivo || '')}</small></td><td class="n">${perdaTxt(x.perda)}</td></tr>`).join('')}</tbody></table></div>`
+        : '<div class="empty">Nenhuma reclamação de produto no período.</div>'}<p class="dica" style="margin-top:8px"><a class="lk" href="#devolucoes">Ver a análise completa em Devoluções →</a></p>`; })
+      .catch(e => { if (e !== STALE && $('#ark')) $('#ark').querySelector('p').textContent = e.message; });
   }
+  // quanto a reclamação custou (conta final) ou o que já se sabe antes do reembolso
+  const perdaSec = P => !P ? '' : P.final ? `<div class="fc-sec"><h5>Quanto custou</h5>${fl('Reembolsado ao comprador', brl(P.reembolsado))}${P.reembolsoPor ? `<div class="fc-nota" style="margin:0 0 4px">Reembolso pago por: ${esc(P.reembolsoPor)}</div>` : ''}
+      ${fl('(−) Frete de ida não devolvido', neg(P.freteIda))}${fl('(−) Frete de volta', neg(P.freteVolta))}${fl('(−) Tarifas não devolvidas', neg(P.tarifas))}${P.custoProduto ? fl('(−) Produto que não voltou', neg(P.custoProduto)) : ''}
+      ${P.mantida ? fl('(+) Venda mantida pelo ML (resultado)', brl(P.resultadoMantido)) : ''}${fl('(=) Perda real', perdaTxt(P.perda), 'tot')}
+      <div class="fc-nota">Fonte: ${esc(P.fonte)}.${P.aguardandoEstorno ? ' Ainda há estorno de frete ou tarifa a caminho: o valor pode diminuir.' : ''}</div></div>`
+    : `<div class="fc-sec"><h5>Quanto pode custar</h5>${fl('Frete de volta que o ML vai cobrar', neg(P.freteVolta))}<div class="fc-nota">A conta completa (frete de ida, tarifas, produto) aparece quando o reembolso sair.</div></div>`;
+  const devSec = D => !D ? '' : `<div class="fc-sec"><h5>Devolução do produto</h5>${fl('Situação', esc(D.status))}${D.reembolso ? fl('Reembolso ao comprador', esc(D.reembolso)) : ''}${D.dinheiro ? fl('Dinheiro', esc(D.dinheiro)) : ''}
+      ${D.envios.map(e => fl(`Envio do ${esc(e.de)} para ${esc(e.para)}`, `${esc(e.status)}${e.rastreio ? ` · ${esc(e.rastreio)}` : ''}`)).join('')}${D.revisada ? '<div class="fc-nota">Já existe revisão desta devolução.</div>' : ''}</div>`;
   async function abreReclamacao(loja, id) {
     $('#dt').textContent = `Reclamação ${id}`; $('#db').innerHTML = '<p style="color:var(--mut)">Lendo a reclamação no Mercado Livre…</p>'; $('#dw').classList.add('on');
     let R; try { R = await getJ(`api/at/reclamacao?loja=${encodeURIComponent(loja)}&id=${encodeURIComponent(id)}`); } catch (e) { if (e === STALE) return; $('#db').innerHTML = `<div class="note">${esc(e.message)}</div>`; return; }
@@ -180,13 +228,30 @@
           <a class="btn2" style="margin-left:auto;text-decoration:none" href="#" data-ficha="${esc(R.loja)}|${esc(R.pedido)}">${ic('pedidos', 13)}Ver venda</a></div>
         ${R.aoVivo ? '' : '<div class="note">Não consegui ler ao vivo no Mercado Livre; mostrando a última cópia coletada. As ações ficam bloqueadas até ler de novo.</div>'}
         <div class="fc-sec"><h5>Motivo</h5>${esc(R.motivo || '—')}</div>
-        <div class="fc-sec"><h5>Conversa da reclamação</h5>${R.mensagens.map(m => `<div class="fc-msg ${m.de === 'Você' ? 'voce' : 'comprador'}">${esc(m.texto || '')}${m.anexos.length ? `<br>📎 ${m.anexos.map(esc).join(', ')}` : ''}<small>${esc(m.de)} → ${esc(m.para)} · ${quando(m.data)}</small></div>`).join('') || '<small style="color:var(--mut)">Sem mensagens.</small>'}</div>
+        ${perdaSec(R.perda)}${devSec(R.devolucao)}
+        <div class="fc-sec"><h5>Conversa da reclamação</h5>${R.mensagens.map(m => `<div class="fc-msg ${m.de === 'Você' ? 'voce' : 'comprador'}">${negrito(esc(m.texto || ''))}${m.anexos.length ? `<br>📎 ${m.anexos.map(esc).join(', ')}` : ''}<small>${esc(m.de)} → ${esc(m.para)} · ${quando(m.data)}</small></div>`).join('') || '<small style="color:var(--mut)">Sem mensagens.</small>'}</div>
         ${R.aberta && R.aoVivo ? `<div class="fc-sec"><h5>O que você pode fazer agora</h5>${R.acoes.length ? '' : '<small style="color:var(--mut)">O Mercado Livre não libera nenhuma ação para o vendedor neste momento.</small>'}
           ${msg.length ? `<select id="rcd" style="margin-bottom:6px">${msg.map(a => `<option value="${a.acao}">${esc(a.txt)}${a.prazo ? ` (até ${quando(a.prazo)})` : ''}</option>`).join('')}</select>
             <textarea id="rct" placeholder="Mensagem" style="width:100%;min-height:70px"></textarea><div class="atm-ro"><label class="btn2" style="cursor:pointer">${ic('down', 13)}Anexar<input type="file" id="rcf" multiple accept=".jpg,.jpeg,.png,.pdf" hidden></label><small id="rca" style="color:var(--mut);margin-right:auto"></small><button id="rce">Enviar mensagem</button></div>` : ''}
-          ${outras.map(a => `<div class="fl" style="align-items:center"><span>${esc(a.txt)}${a.prazo ? ` <small>(até ${quando(a.prazo)})</small>` : ''}${a.obrigatoria ? ' <span class="tag warn">obrigatória</span>' : ''}</span>
+          ${outras.filter(a => a.revisao === 'falha').map(a => `<div class="fc-sec" style="margin:8px 0"><h5>${esc(a.txt)}${a.prazo ? ` · até ${quando(a.prazo)}` : ''}</h5>
+            <select id="rvm" style="width:100%;margin-bottom:6px"><option value="">Qual é o problema?</option>${(R.motivosRevisao || []).map(m => `<option value="${esc(m.id)}">${esc(m.txt)}${m.foto ? ' (precisa de foto)' : ''}</option>`).join('')}</select>
+            <textarea id="rvt" placeholder="Explique o problema para o Mercado Livre" style="width:100%;min-height:60px"></textarea>
+            <div class="atm-ro"><label class="btn2" style="cursor:pointer">${ic('down', 13)}Fotos<input type="file" id="rvf" multiple accept=".jpg,.jpeg,.png,.pdf" hidden></label><small id="rva" style="color:var(--mut);margin-right:auto"></small><button id="rve" data-rv="${a.acao}">Reportar problema</button></div></div>`).join('')}
+          ${outras.filter(a => a.revisao !== 'falha').map(a => `<div class="fl" style="align-items:center"><span>${esc(a.txt)}${a.prazo ? ` <small>(até ${quando(a.prazo)})</small>` : ''}${a.obrigatoria ? ' <span class="tag warn">obrigatória</span>' : ''}</span>
             ${a.conhecida ? `<span>${a.percentual ? '<input type="number" min="1" max="99" placeholder="%" style="width:70px;margin-right:6px" data-p="' + a.acao + '">' : ''}<button class="btn2" data-acao="${a.acao}">Fazer</button></span>` : `<a class="btn2" target="_blank" rel="noopener" href="${esc(R.link)}" style="text-decoration:none">Fazer no ML</a>`}</div>`).join('')}</div>` : ''}`;
       $('#rcf')?.addEventListener('change', () => { $('#rca').textContent = [...$('#rcf').files].map(f => f.name).join(', '); });
+      $('#rvf')?.addEventListener('change', () => { $('#rva').textContent = [...$('#rvf').files].map(f => f.name).join(', '); });
+      $('#rve')?.addEventListener('click', async () => {
+        const a = R.acoes.find(x => x.acao === $('#rve').dataset.rv), m = (R.motivosRevisao || []).find(x => x.id === $('#rvm').value), texto = $('#rvt').value.trim(), fs = [...$('#rvf').files];
+        if (!m) return avisoAcao('Escolha qual é o problema.', true);
+        if (!texto) return avisoAcao('Explique o problema para o Mercado Livre.', true);
+        if (m.foto && !fs.length) return avisoAcao('Para esse problema o Mercado Livre pede pelo menos uma foto.', true);
+        if (!await confirmaAcao({ titulo: a.txt, texto: `Devolução da venda ${esc(R.pedido)} (${esc(R.nomeLoja)}): <b>${esc(m.txt)}</b>${fs.length ? `, com ${fs.length} foto(s)` : ''}.`, previa: texto,
+          perigo: 'O Mercado Livre analisa a sua revisão e decide se o comprador recebe o reembolso. Só dá para revisar uma vez.', marcar: 'Conferi o produto e as fotos', botao: 'Reportar problema' })) return;
+        $('#rve').disabled = true;
+        try { const anexos = await lerArquivos(fs, 5); R = await postAcao('api/at/reclamacoes/acao', { loja: R.loja, id: R.id, acao: a.acao, motivo: m.id, mensagem: texto, anexos }); avisoAcao('Revisão enviada ao Mercado Livre.'); desenha(); }
+        catch (e) { avisoAcao(e.message, true); $('#rve').disabled = false; }
+      });
       $('#rce')?.addEventListener('click', async () => {
         const texto = $('#rct').value.trim(), fs = [...$('#rcf').files], a = R.acoes.find(x => x.acao === $('#rcd').value);
         if (!texto) return avisoAcao('Escreva a mensagem.', true);
