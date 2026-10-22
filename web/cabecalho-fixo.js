@@ -5,7 +5,7 @@
 (() => {
   const box = document.createElement('div');
   box.id = 'cabfixo';
-  box.style.cssText = 'position:fixed;top:0;left:0;z-index:15;overflow:hidden;display:none;background:#fff;box-shadow:0 3px 8px rgba(15,23,42,.12)';
+  box.style.cssText = 'position:fixed;top:0;left:0;z-index:15;overflow:hidden;display:none;background:var(--panel);box-shadow:0 3px 8px rgba(15,23,42,.12)';
   document.body.appendChild(box);
   const css = document.createElement('style');
   css.textContent = '@media print{#cabfixo{display:none!important}}';

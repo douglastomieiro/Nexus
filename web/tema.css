@@ -1,0 +1,60 @@
+/* Tema escuro: as variáveis do :root ganham valores escuros; abaixo, os tons pastel do tema claro (avisos, etiquetas, DRE) ganham equivalentes escuros. */
+:root[data-tema=escuro]{color-scheme:dark;--bg:#0b1220;--panel:#131c2e;--panel2:#18233a;--bd:#24314a;--tx:#e2e8f0;--tx1:#f8fafc;--tx2:#cbd5e1;--tx3:#a9b6ca;--mut:#8b9ab2;--mut2:#64748b;--ac:#4f8ff7;--ac2:#1c2b4d;--ok:#22c55e;--bad:#f87171;--warn:#fbbf24;--l1:#60a5fa;--l2:#fb923c;--soft:#101929;--row:#18233a;--hov:#1b2740;--chip:#1f2b42;--line:#1c2840;--line2:#2a3852;--off:#3a4a66;--inbd:#2f3d58;--sh:0 1px 2px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.25)}
+
+/* seletor Claro / Escuro no menu lateral */
+.temasel{display:flex;gap:2px;margin:0 4px 12px;padding:3px;border:1px solid var(--bd);border-radius:10px;transition:opacity .15s}
+.temasel button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:none;color:var(--tx3);padding:5px 8px;border-radius:7px;font:500 12px Inter,system-ui,sans-serif}
+.temasel button:hover{filter:none;background:var(--hov);color:var(--tx1)}
+.temasel button.on{background:var(--ac2);color:var(--ac);font-weight:600}
+.temasel svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+body:not(.pin) nav:not(:hover) .temasel{opacity:0;pointer-events:none}
+@media(max-width:860px){body:not(.pin) nav:not(:hover) .temasel,.temasel{width:max-content;opacity:1;pointer-events:auto}}
+@media print{.temasel{display:none}}
+
+/* etiquetas e selos */
+[data-tema=escuro] .tag.ok,[data-tema=escuro] .dl.up,[data-tema=escuro] .lgt.Full,[data-tema=escuro] .sg.g,[data-tema=escuro] #dsc .dc,[data-tema=escuro] #dsc .cp2.on{background:rgba(34,197,94,.16);color:#4ade80}
+[data-tema=escuro] .tag.bad,[data-tema=escuro] .dl.dn,[data-tema=escuro] .sg.r{background:rgba(248,113,113,.16);color:#fca5a5}
+[data-tema=escuro] .tag.warn,[data-tema=escuro] .cls b.B{background:rgba(251,191,36,.15);color:#fcd34d}
+[data-tema=escuro] .lgt.Flex,[data-tema=escuro] .sg.a{background:rgba(249,115,22,.16);color:#fdba74}
+[data-tema=escuro] .sg,[data-tema=escuro] .sg.b,[data-tema=escuro] .cls b,[data-tema=escuro] .oid,[data-tema=escuro] code{background:rgba(79,143,247,.16);color:#93c5fd}
+[data-tema=escuro] .sg.n,[data-tema=escuro] .cls b.C{background:var(--hov);color:var(--tx3)}
+[data-tema=escuro] .oid:hover{background:rgba(79,143,247,.28)}
+[data-tema=escuro] pre{background:var(--soft);color:var(--tx)}
+[data-tema=escuro] .mg.x{background:#475569}
+
+/* avisos, botões e bordas de destaque */
+[data-tema=escuro] .ph .st.velho{background:rgba(248,113,113,.12);border-color:rgba(248,113,113,.35);color:#fca5a5}
+[data-tema=escuro] .note{background:rgba(251,191,36,.10);border-color:rgba(251,191,36,.3);color:#fcd34d}
+[data-tema=escuro] #dw .exp{background:var(--row);border-color:var(--bd);border-left-color:var(--ac)}
+[data-tema=escuro] .chip:hover,[data-tema=escuro] .prod>a.pc:hover{border-color:#3b5a99}
+[data-tema=escuro] .btn3{border-color:#3b4a7a;color:#a5b4fc}[data-tema=escuro] .btn3.p{color:#fff}
+[data-tema=escuro] .rtab.red{border-color:rgba(248,113,113,.4);color:#fca5a5}[data-tema=escuro] .rtab.red.on{color:#fff}
+[data-tema=escuro] select:focus,[data-tema=escuro] input:focus,[data-tema=escuro] textarea:focus,[data-tema=escuro] .inp:focus-within{border-color:#4f8ff7;box-shadow:0 0 0 3px rgba(79,143,247,.2)}
+[data-tema=escuro] nav:hover{box-shadow:12px 0 32px rgba(0,0,0,.5)}
+[data-tema=escuro] #dw{box-shadow:-12px 0 40px rgba(0,0,0,.5)}
+
+/* DRE: cabeçalho e seções continuam destacados; as células fixas à esquerda precisam de fundo opaco */
+[data-tema=escuro] #tdre th,[data-tema=escuro] #tdre th:first-child,[data-tema=escuro] #tdre tr.sec td{background:#1e2a42;color:#e2e8f0}
+[data-tema=escuro] #tdre tr.sub td,[data-tema=escuro] #tdre tr.sub td.lb{background:#16233f;color:#93c5fd}
+[data-tema=escuro] #tdre tr.tot td,[data-tema=escuro] #tdre tr.tot td.lb{background:#2a2716;color:#fde68a;border-color:#4d4519}
+[data-tema=escuro] #tdre tr.eq td,[data-tema=escuro] #tdre tr.eq td.lb{background:var(--soft)}
+[data-tema=escuro] #tdre tr.sub:hover td,[data-tema=escuro] #tdre tr.tot:hover td{filter:brightness(1.12)}
+
+/* Gestão › Descontos */
+[data-tema=escuro] #dsc tr.fail td{background:#2a1618}[data-tema=escuro] #dsc tr.proc td{background:#2a2414}[data-tema=escuro] #dsc tr.sel td{background:#16233f}[data-tema=escuro] #dsc tr.okf td{background:#13261c}
+[data-tema=escuro] #dsc .di.dirty{background:#2a2414}[data-tema=escuro] #dsc .di.saved{background:#13261c}
+[data-tema=escuro] #dsc .tp.c{background:rgba(14,165,233,.16);color:#7dd3fc}[data-tema=escuro] #dsc .tp.p{background:rgba(99,102,241,.18);color:#a5b4fc}[data-tema=escuro] #dsc .tp.f{background:rgba(251,191,36,.15);color:#fcd34d}[data-tema=escuro] #dsc .tp.l{background:rgba(168,85,247,.16);color:#d8b4fe}
+[data-tema=escuro] #dsc .err{color:#fca5a5}
+[data-tema=escuro] #dsc .cp2{border-color:var(--line2)}
+[data-tema=escuro] #dsc .mini.d,[data-tema=escuro] #dsc .chip.bad{border-color:rgba(248,113,113,.4);color:#fca5a5}[data-tema=escuro] #dsc .chip.bad.on{color:#fff}
+[data-tema=escuro] #dsc .mini.ok2{border-color:rgba(34,197,94,.4);color:#4ade80}
+[data-tema=escuro] .dsel{box-shadow:0 -6px 20px rgba(0,0,0,.4)}
+
+/* caixas de aviso montadas no JS com a cor no atributo style */
+[data-tema=escuro] [style*="background:#fffbeb"]{background:rgba(251,191,36,.10)!important;border-color:rgba(251,191,36,.3)!important}
+[data-tema=escuro] [style*="background:#fff5f5"]{background:rgba(248,113,113,.10)!important;border-color:rgba(248,113,113,.35)!important}
+[data-tema=escuro] [style*="background:#ecfdf5"],[data-tema=escuro] [style*="background:#f0fdf4"]{background:rgba(34,197,94,.10)!important;border-color:rgba(34,197,94,.3)!important}
+[data-tema=escuro] [style*="background:#fff;"]{background:var(--panel)!important}
+[data-tema=escuro] [style*="background:#fff1ec"]{background:rgba(238,77,45,.18)!important}
+[data-tema=escuro] [style*="color:#0f172a"]{color:var(--tx1)!important}
+[data-tema=escuro] [style*="background:var(--bad);color:#fff"]{background:#dc2626!important} /* contador de alertas: número branco legível */
