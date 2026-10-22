@@ -21,6 +21,7 @@ import { registrarVendas } from './vendas.js';
 import { registrarAnuncios } from './anuncios.js';
 import { registrarPublicidade } from './publicidade.js';
 import { registrarResumo } from './resumo.js';
+import { registrarPreferencias, guarda } from './preferencias.js';
 import { registrarDescontos } from './descontos/rotas.js';
 import { registrarShopee, alertasShopee } from './shopee-rotas.js';
 import { registrarContas } from './contas-rotas.js';
@@ -62,6 +63,7 @@ const OK = `status=200`;
 const D = `date(json_extract(body,'$.date_created'),'-3 hours')`;
 const H = (fn) => (req, res) => { try { res.json(fn(req.query, req)); } catch (e) { if (!e.status) console.error(e); res.status(e.status || 500).json({ erro: e.message }); } };
 
+app.use(guarda); // perfis de uso: com perfis ligados, a API pede sessão e cada perfil só vê e age nos seus módulos
 app.get('/api/lojas', H(() => nomes));
 
 app.get('/api/resumo', H(q => {
@@ -238,6 +240,7 @@ registrarVendas(app, { H, lojasSel }); // lista de despacho, etiquetas, notas in
 registrarAnuncios(app, { H, lojasSel }); // gestão de anúncios: margem, preço mínimo e ações (status, preço, estoque, título, fotos, ficha)
 registrarPublicidade(app, { H, lojasSel }); // Product Ads: campanhas e anúncios patrocinados com ações e lucro depois do Ads
 registrarResumo(app, { H, lojasSel }); // tela inicial: pendências, semana, reputação, envios e fatura
+registrarPreferencias(app); // Personalizar: módulos, Minhas regras, perfis e login
 app.get('/api/config', H(() => ({ ...getConfig(), auto: Object.fromEntries(Object.keys(nomes).map(l => { const a = aliquotaAuto(l); return [l, a && { cnpj: a.cnpj, nome: a.nome, anexo: a.anexo, meses: Object.entries(a.meses).slice(-6).map(([mes, v]) => ({ mes, ...v })) }]; })) })));
 app.post('/api/config', H((_, req) => { for (const k of [...Object.keys(nomes).map(l => 'aliquota_' + l), 'devolucao_perde_produto']) if (req.body[k] != null) {
     const v = Number(req.body[k]); if (!Number.isFinite(v) || v < 0 || v > 100) throw Object.assign(new Error(`valor inválido para ${k}`), { status: 400 });

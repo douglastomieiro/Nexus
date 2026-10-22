@@ -163,7 +163,9 @@ a.ni:hover{background:var(--row)}
     const novos = D.itens.filter(i => !vistos.has(i.id) && !avisados.has(i.id));
     novos.forEach(i => avisados.add(i.id));
     marca();
-    if (novos.length) avisa(novos);
+    // cartão e som só dos tipos escolhidos em Personalizar (todos continuam no sino)
+    const avisar = novos.filter(i => ler('notifTipo:' + i.tipo, 'true') !== 'false');
+    if (avisar.length) avisa(avisar);
     // vendas: a primeira consulta neste navegador só registra as de hoje, sem aviso
     const vs = D.vendas || [];
     if (!vVistas) vVistas = new Set(vs.map(v => v.id));

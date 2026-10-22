@@ -8,6 +8,7 @@ import { notificacoes } from './notificacoes.js';
 import { cartoesVendas } from './vendas.js';
 import { cartoesAnuncios } from './anuncios.js';
 import { cartoesPub } from './publicidade.js';
+import { ligado, modulos, regras } from './preferencias.js';
 
 const parse = s => { try { return JSON.parse(s); } catch { return null; } };
 const NIVEL = { '1_red': 'Vermelho', '2_orange': 'Laranja', '3_yellow': 'Amarelo', '4_light_green': 'Verde-claro', '5_green': 'Verde' };
@@ -18,12 +19,13 @@ const seguro = (f, padrao) => { try { return f(); } catch (e) { console.error('[
 
 let cache = { k: '', t: 0, v: null };
 function resumo(lojas) {
-  const k = lojas.join(','); if (cache.k === k && Date.now() - cache.t < 60e3) return cache.v;
+  const k = lojas.join(',') + JSON.stringify(modulos()) + JSON.stringify(regras().reputacao); if (cache.k === k && Date.now() - cache.t < 60e3) return cache.v;
   const hj = hoje(), ini7 = addDias(hj, -6), ini14 = addDias(hj, -13), lim60 = Date.now() - 60 * 864e5;
 
   // pendências: o mesmo que o sino mostra, contado por tipo
   const N = seguro(() => notificacoes(), { itens: [] }), conta = t => N.itens.filter(x => x.tipo === t && (x.canal !== 'ml' || lojas.includes(x.loja))).length;
-  const V = seguro(() => cartoesVendas(lojas), null), A = seguro(() => cartoesAnuncios(lojas), null), P = seguro(() => cartoesPub(lojas), null);
+  // módulo desligado em Personalizar: nem calcula
+  const V = ligado('vendas') ? seguro(() => cartoesVendas(lojas), null) : null, A = ligado('anuncios') ? seguro(() => cartoesAnuncios(lojas), null) : null, P = ligado('ads') ? seguro(() => cartoesPub(lojas), null) : null;
   const prazoRec = db.prepare(`SELECT loja, body FROM raw WHERE recurso='claim' AND status=200 AND json_extract(body,'$.status')='opened'`).all().filter(r => lojas.includes(r.loja))
     .map(r => parse(r.body)).filter(c => (c?.players || []).some(p => p.role === 'respondent' && (p.available_actions || []).some(a => a.due_date && Date.parse(a.due_date) - Date.now() < 864e5))).length;
   const pendencias = { perguntas: conta('pergunta'), mensagens: conta('mensagem'), reclamacoes: conta('reclamacao'), reclamacoesPrazo: prazoRec, devolucoesShopee: conta('devolucao'),
@@ -65,7 +67,7 @@ function resumo(lojas) {
   const fatura = lojas.map(l => { const p = parse(db.prepare(`SELECT body FROM raw WHERE loja=? AND recurso='billing_periods' AND status=200`).get(l)?.body || 'null')?.results?.[0];
     return p ? { loja: l, nome: LOJAS[l].nome, valor: p.amount, emAberto: p.unpaid_amount, vence: p.expiration_date, de: p.period?.date_from, ate: p.period?.date_to, situacao: p.period_status === 'CLOSED' ? 'fechada' : 'em aberto' } : null; }).filter(Boolean);
 
-  const v = { hoje: hj, pendencias, semana: sem, visitas, reputacao, envios, fatura, ads: P?.resumo?.atual || null };
+  const v = { hoje: hj, pendencias, semana: sem, visitas, reputacao, envios, fatura, ads: P?.resumo?.atual || null, modulos: modulos(), limites: regras().reputacao };
   cache = { k, t: Date.now(), v }; return v;
 }
 

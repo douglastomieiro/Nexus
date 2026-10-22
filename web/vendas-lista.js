@@ -31,7 +31,7 @@
         <label style="flex:1;min-width:200px">Buscar<input type="search" id="vdq" placeholder="Nº da venda, produto, SKU ou comprador"></label>
         <label>Conta<select id="vdc"></select></label><label>Forma de entrega<select id="vdl"></select></label><label>Situação<select id="vds"></select></label>
         <label>NF-e<select id="vdn"><option value="">Todas</option><option value="emitida">Com nota</option><option value="falta">Falta anexar</option><option value="sem">Sem nota coletada</option></select></label>
-        <label class="ck"><input type="checkbox" id="vdr"> Com reclamação</label><label class="ck"><input type="checkbox" id="vdp"> Vendas com publicidade</label><label class="ck"><input type="checkbox" id="vdx"> Com prejuízo</label></div></div>
+        <label class="ck"><input type="checkbox" id="vdr"> Com reclamação</label><label class="ck"><input type="checkbox" id="vdp"> Vendas com publicidade</label><label class="ck"><input type="checkbox" id="vdx"> Com prejuízo</label><span id="vdfs"></span></div></div>
       <div class="vd-bar"><span class="n" id="vdi"></span><button class="btn2" id="vdt">${ic('down', 13)}Baixar planilha</button>
         <button class="btn2" id="vdz" disabled>Etiquetas térmicas (ZPL)</button><button id="vde" disabled>${ic('pedidos', 13)}Imprimir etiquetas (PDF)</button></div>
       <div class="box"><div class="tw" style="max-height:none"><table class="rt"><thead><tr><th style="width:28px"><input type="checkbox" id="vdall" title="Selecionar as etiquetas liberadas"></th><th>Venda</th><th>Produto</th><th>Envio</th><th>NF-e</th>
@@ -47,6 +47,7 @@
     $('#vdk').onclick = e => { const c = e.target.closest('[data-cf]'); if (c) trocaAba(JSON.parse(c.dataset.cf)); };
     $('#vdb').onchange = e => { const c = e.target.closest('input[data-s]'); if (!c) return; c.checked ? sel.add(c.dataset.s) : sel.delete(c.dataset.s); c.closest('tr').classList.toggle('sel', c.checked); barra(); };
     $('#vdall').onchange = e => { for (const x of filtradas().filter(x => x.envio?.imprimir)) e.target.checked ? sel.add(chave(x)) : sel.delete(chave(x)); desenha(); };
+    window.filtrosSalvos?.($('#vdfs'), 'vendas', () => ({ ...F }), f => { $('#vdq').value = f.q || ''; $('#vdc').value = f.conta || ''; $('#vdl').value = f.log || ''; $('#vdn').value = f.nf || ''; $('#vdr').checked = !!f.rec; $('#vdp').checked = !!f.pub; $('#vdx').checked = !!f.prej; trocaAba(f); });
     $('#vde').onclick = () => imprimir('pdf'); $('#vdz').onclick = () => imprimir('zpl'); $('#vdt').onclick = planilha;
     desenha();
     const rota = location.hash;

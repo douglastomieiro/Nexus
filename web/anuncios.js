@@ -19,7 +19,7 @@
   SUB.anuncios = 'Seus anúncios do Mercado Livre com custo, margem e preço mínimo, e as ações: pausar, preço, estoque, título, fotos, ficha técnica';
   NOTA.anuncios = 'Vendas e margem dos últimos 30 dias';
 
-  const lerAlvo = () => { try { return Number(localStorage.getItem('anuncios_alvo')) || 15; } catch { return 15; } };
+  const lerAlvo = () => window.REGRAS?.margemMin ?? 15; // Minhas regras (Configurações › Personalizar)
   const F = { q: '', conta: '', st: 'active', lg: '', tipo: '', card: '' };
   let D = null, sel = new Set(), alvo = lerAlvo();
   // conta de um preço: o que o ML repassa, o lucro e a margem (estimativa com a comissão, frete e Ads por unidade do anúncio)
@@ -29,7 +29,7 @@
   const k = x => `${x.loja}|${x.id}`;
 
   VIEWS.anuncios = async function () {
-    sel = new Set(); D = await api('anuncios/lista');
+    sel = new Set(); alvo = lerAlvo(); D = await api('anuncios/lista');
     $('#view').innerHTML = `<div class="kgrid" id="ank"></div>
       <div class="flt" style="margin-top:0"><div class="vd-f">
         <label style="flex:1;min-width:200px">Buscar<input type="search" id="anq" placeholder="Título, código MLB ou SKU"></label>
@@ -37,7 +37,7 @@
         <label>Situação<select id="ans"><option value="active">Ativos</option><option value="paused">Pausados</option><option value="closed">Finalizados</option><option value="">Todos</option></select></label>
         <label>Entrega<select id="anl"><option value="">Todas</option><option>Padrão</option><option>Flex</option><option>Full</option></select></label>
         <label>Tipo<select id="ant"><option value="">Todos</option><option>Clássico</option><option>Premium</option></select></label>
-        <span class="an-alvo">Margem mínima <input id="ana" inputmode="decimal" value="${alvo}">%</span></div></div>
+        <span class="an-alvo" title="Padrão em Configurações › Personalizar › Minhas regras">Margem mínima <input id="ana" inputmode="decimal" value="${alvo}">%</span><span id="anfs"></span></div></div>
       <div class="vd-bar"><span class="n" id="ani"></span>
         <button class="btn2" id="anx">${ic('down', 13)}Planilha</button><label class="btn2" style="cursor:pointer">Importar planilha<input type="file" id="anf" accept=".csv,.txt" hidden></label>
         <button class="btn2" data-m="pausar" disabled>Pausar</button><button class="btn2" data-m="reativar" disabled>Reativar</button><button class="btn2" data-m="preco" disabled>Preço</button><button class="btn2" data-m="estoque" disabled>Estoque</button></div>
@@ -46,13 +46,14 @@
     $('#ans').value = F.st; $('#anc').value = F.conta; $('#anl').value = F.lg; $('#ant').value = F.tipo; $('#anq').value = F.q;
     const muda = () => { F.q = $('#anq').value.trim().toLowerCase(); F.conta = $('#anc').value; F.st = $('#ans').value; F.lg = $('#anl').value; F.tipo = $('#ant').value; desenha(); };
     for (const id of ['#anc', '#ans', '#anl', '#ant']) $(id).onchange = muda; $('#anq').oninput = muda;
-    $('#ana').onchange = () => { alvo = Math.min(Math.max(Number($('#ana').value.replace(',', '.')) || 0, 0), 80); $('#ana').value = alvo; try { localStorage.setItem('anuncios_alvo', alvo); } catch { /* só nesta visita */ } desenha(); };
+    $('#ana').onchange = () => { alvo = Math.min(Math.max(Number($('#ana').value.replace(',', '.')) || 0, 0), 80); $('#ana').value = alvo; desenha(); }; // só nesta visita: a margem padrão fica em Minhas regras
     $('#ank').onclick = e => { const c = e.target.closest('[data-cd]'); if (!c) return; F.card = F.card === c.dataset.cd ? '' : c.dataset.cd; if (F.card) { F.st = c.dataset.cd === 'pausados' ? 'paused' : ''; $('#ans').value = F.st; } desenha(); };
     $('#anb').onchange = e => { const c = e.target.closest('input[data-s]'); if (!c) return; c.checked ? sel.add(c.dataset.s) : sel.delete(c.dataset.s); c.closest('tr').classList.toggle('sel', c.checked); barra(); };
     $('#anb').onclick = e => { const b = e.target.closest('[data-ed]'); if (b) { const [l, i] = b.dataset.ed.split('|'); abreEdicao(l, i); } };
     $('#anall').onchange = e => { for (const x of filtrados().slice(0, 400)) e.target.checked ? sel.add(k(x)) : sel.delete(k(x)); desenha(); };
     document.querySelectorAll('.vd-bar [data-m]').forEach(b => b.onclick = () => massa(b.dataset.m));
     $('#anx').onclick = planilha; $('#anf').onchange = importa;
+    window.filtrosSalvos?.($('#anfs'), 'anuncios', () => ({ ...F }), f => { Object.assign(F, f); $('#ans').value = F.st; $('#anc').value = F.conta; $('#anl').value = F.lg; $('#ant').value = F.tipo; $('#anq').value = F.q; desenha(); });
     desenha();
   };
 
@@ -76,7 +77,7 @@
         <td><div class="pr">${thumb(x.thumb)}<div><b title="${esc(x.titulo)}">${esc(x.titulo)}</b><small>${esc(x.id)}${x.sku ? ` · ${esc(x.sku)}` : ''} · ${esc(x.nomeLoja)} · ${esc(x.tipo)}<span class="lgt ${esc(x.lg)}">${esc(x.lg)}</span></small>
           <small>${x.status !== 'active' ? `<span class="${x.status === 'paused' ? 'warn' : 'bad'}">${esc(x.statusTxt)}</span>` : ''}${x.sub.length ? ` ${esc(x.sub.join(', '))}` : ''}${x.automatico ? ' · <span title="Ajuste automático de preço ligado no ML">preço automático</span>' : ''}${x.variacoes ? ` · ${x.variacoes} variações` : ''}</small></div></div></td>
         <td class="n"><b>${brl(x.venda)}</b>${x.promo ? `<small><s>${brl(x.preco)}</s> promoção</small>` : ''}<small title="Preço − comissão − tarifa fixa − frete por unidade">recebe ${brl(cp.recebe)}</small></td>
-        <td class="n">${x.lg === 'Full' ? `<b>${num(x.full ?? 0)}</b><small>no Full</small>` : `<b class="${x.estoque ? '' : 'bad'}">${num(x.estoque)}</b>`}${x.cobertura != null ? `<small>${x.cobertura > 365 ? '+1 ano' : `${num(x.cobertura)} dias`}</small>` : ''}${x.sugFull ? `<small class="warn">mandar ${num(x.sugFull)}</small>` : ''}</td>
+        <td class="n">${x.lg === 'Full' ? `<b>${num(x.full ?? 0)}</b><small>no Full</small>` : `<b class="${x.estoque ? '' : 'bad'}">${num(x.estoque)}</b>`}${x.cobertura != null ? `<small class="${x.cobertura < (window.REGRAS?.estoqueMinDias ?? 7) ? 'bad' : ''}">${x.cobertura > 365 ? '+1 ano' : `${num(x.cobertura)} dias`}</small>` : ''}${x.sugFull ? `<small class="warn">mandar ${num(x.sugFull)}</small>` : ''}</td>
         <td class="n"><b>${num(x.v30)}</b> <small>vendas</small><small>${num(x.visitas30)} visitas${x.conversao != null ? ` · ${pc(x.conversao, 1)}` : ''}</small></td>
         <td class="c">${qual(x.qualidade)}</td>
         <td>${x.catalogo ? `<span class="tag ${x.catalogo.status === 'winning' ? 'ok' : x.catalogo.status ? 'warn' : ''}">${esc(x.catalogo.txt)}</span>${x.catalogo.ptw && x.catalogo.status !== 'winning' ? `<small>ganha com ${brl(x.catalogo.ptw)}</small>` : ''}` : '<small>—</small>'}</td>

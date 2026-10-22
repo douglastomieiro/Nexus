@@ -76,7 +76,7 @@
     $('#aps').onchange = () => { FP.status = $('#aps').value; telaPerguntas(); };
     const desenha = () => {
       const L = D.lista.filter(x => (!FP.loja || x.loja === FP.loja) && (!FP.q || (x.texto + ' ' + x.anuncio.titulo).toLowerCase().includes(FP.q.toLowerCase())));
-      $('#apb').innerHTML = L.map(x => { const A = x.anuncio, velha = !x.resposta && Date.now() - Date.parse(x.data) > 3600e3;
+      $('#apb').innerHTML = L.map(x => { const A = x.anuncio, velha = !x.resposta && Date.now() - Date.parse(x.data) > (window.REGRAS?.respostaMin || 60) * 60e3;
         return `<div class="atq${velha ? ' velha' : ''}" data-k="${esc(x.loja)}|${esc(x.id)}">
           <div class="atq-an">${A.thumb ? `<img src="${esc(A.thumb)}" alt="">` : '<span class="th"></span>'}<div style="min-width:0"><b title="${esc(A.titulo)}">${A.link ? `<a class="lk" target="_blank" rel="noopener" href="${esc(A.link)}">${esc(A.titulo)}</a>` : esc(A.titulo)}</b>
             <small>${A.preco != null ? brl(A.preco) : ''}${A.estoque != null ? ` · estoque ${num(A.estoque)}` : ''}${A.lg ? ` · ${esc(A.lg)}` : ''}${A.status && A.status !== 'active' ? ` · <span class="warn">${esc(A.status)}</span>` : ''}</small>

@@ -6,6 +6,7 @@
 import { db, getRaw } from './db.js';
 import { LOJAS } from './ml.js';
 import { SHOPEE } from './shopee.js';
+import { ligado } from './preferencias.js';
 
 const all = (sql, ...p) => db.prepare(sql).all(...p);
 const parse = s => { try { return JSON.parse(s); } catch { return null; } };
@@ -84,8 +85,10 @@ function vendasDeHoje() {
 
 export function notificacoes() {
   const itens = [], avisos = [];
-  for (const l of Object.keys(LOJAS)) mercadoLivre(l, itens);
-  for (const l of Object.keys(SHOPEE)) shopee(l, itens, avisos);
+  // módulos desligados em Personalizar não entram no sino
+  if (ligado('atendimento')) for (const l of Object.keys(LOJAS)) mercadoLivre(l, itens);
+  if (ligado('shopee')) for (const l of Object.keys(SHOPEE)) shopee(l, itens, avisos);
+  if (!ligado('atendimento')) itens.length = 0;
   itens.sort((a, b) => String(b.data || '').localeCompare(String(a.data || '')));
   return { itens, avisos, vendas: vendasDeHoje(), agora: Date.now() };
 }

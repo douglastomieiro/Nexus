@@ -7,6 +7,7 @@ import { LOJAS, mlGet } from './ml.js';
 import { calcular, getCustos, skuDe, aliquotaPctFn } from './margem.js';
 import { LOG, hoje, addDias, r2 } from './painel.js';
 import { acaoML, acaoMLCom, leML, enviaArquivos, HA, SIMULADO } from './acoes.js';
+import { regras } from './preferencias.js';
 
 const erro = (msg, status = 400) => Object.assign(new Error(msg), { status });
 const parse = s => { try { return JSON.parse(s); } catch { return null; } };
@@ -28,7 +29,7 @@ const tarifas = () => { const m = {}; for (const r of db.prepare(`SELECT loja, c
 // ───────── lista ─────────
 let cache = { k: '', t: 0, v: null };
 function lista(lojas) {
-  const k = lojas.join(','); if (cache.k === k && Date.now() - cache.t < 60e3) return cache.v;
+  const R = regras(), k = lojas.join(',') + '|' + R.coberturaDias + '|' + R.qualidadeMin; if (cache.k === k && Date.now() - cache.t < 60e3) return cache.v;
   const calc = (() => { try { return calcular({ lojas, desde: addDias(hoje(), -29) }); } catch (e) { console.error('[anuncios] conta:', e.message); return null; } })();
   const pi = {}; for (const p of calc?.porItem || []) { const x = pi[p.loja + ':' + p.item] ||= { unidades: 0, pedidos: 0, receita: 0, comissao: 0, frete: 0, ads: 0, lucro: 0, custo: 0, semCusto: false }; for (const c of Object.keys(x)) if (c !== 'semCusto') x[c] += p[c] || 0; if (p.semCusto) x.semCusto = true; }
   const custos = getCustos(), tf = tarifas(), mes = hoje().slice(0, 7), aliq = Object.fromEntries(lojas.map(l => [l, (aliquotaPctFn(l)(mes) || 0) / 100]));
@@ -54,13 +55,13 @@ function lista(lojas) {
       v30: v?.unidades || 0, lucro30: v && !v.semCusto ? r2(v.lucro) : null, margem30: v?.receita && !v.semCusto ? v.lucro / v.receita : null, visitas7: somaVisitas(r.loja, it.id, 7), visitas30: v30, conversao: v30 ? (v?.pedidos || 0) / v30 : null,
       qualidade: perf?.score != null ? { score: Math.round(perf.score), nivel: perf.level } : null, saude: it.health ?? null,
       catalogo: it.catalog_listing ? { status: ptw?.status || null, txt: CATALOGO[ptw?.status] || ptw?.status || 'sem dados', ptw: ptw?.price_to_win ?? null } : null, automatico: auto.has(it.id),
-      cobertura: diario ? Math.floor((ehFull ? full : est + (full || 0)) / diario) : null, sugFull: ehFull && diario ? Math.max(0, Math.ceil(diario * 30) - (full || 0)) : null,
+      cobertura: diario ? Math.floor((ehFull ? full : est + (full || 0)) / diario) : null, sugFull: ehFull && diario ? Math.max(0, Math.ceil(diario * R.coberturaDias) - (full || 0)) : null,
       // para o preço mínimo e o "você recebe": custo, comissão (fração), tarifa fixa, frete e Ads por unidade, imposto (fração)
       conta: { custo, com: r2(com * 10000) / 10000, fixa: t?.fixa || 0, frete: freteU != null ? r2(freteU) : null, ads: r2(adsU), imp: aliq[r.loja] || 0 } });
   }
   const c = x => itens.filter(x).length;
   const v = { itens: itens.sort((a, b) => (b.status === 'active') - (a.status === 'active') || b.v30 - a.v30 || b.vendidos - a.vendidos),
-    cards: { ativos: c(x => x.status === 'active'), pausados: c(x => x.status === 'paused'), semEstoque: c(x => x.status !== 'closed' && x.lg !== 'Full' && !x.estoque), qualidade: c(x => x.status === 'active' && x.qualidade && x.qualidade.score < 60),
+    cards: { ativos: c(x => x.status === 'active'), pausados: c(x => x.status === 'paused'), semEstoque: c(x => x.status !== 'closed' && x.lg !== 'Full' && !x.estoque), qualidade: c(x => x.status === 'active' && x.qualidade && x.qualidade.score < R.qualidadeMin),
       semCusto: c(x => x.status === 'active' && x.conta.custo == null), catalogo: c(x => x.status === 'active' && x.catalogo && x.catalogo.status && x.catalogo.status !== 'winning'), repor: c(x => x.status === 'active' && x.sugFull > 0) },
     lojas: lojas.map(l => ({ loja: l, nome: LOJAS[l].nome })) };
   cache = { k, t: Date.now(), v }; return v;

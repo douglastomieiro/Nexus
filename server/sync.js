@@ -5,6 +5,10 @@ import { MODULOS, ctx } from './collectors.js';
 import { logColeta } from './db.js';
 import { rodarShopee } from './shopee-coleta.js';
 import { shopeeConfigurada } from './shopee.js';
+import { ligado } from './preferencias.js';
+
+// coletas que só servem a um módulo: com o módulo desligado em Personalizar, não rodam
+const DO_MODULO = { atendimento: 'atendimento', ads: 'ads', promocoes: 'promocoes' };
 
 const rodando = new Set();
 const ids = {};
@@ -13,6 +17,7 @@ export async function rodar(modulos, { lojas = Object.keys(LOJAS), force = false
   await Promise.all(lojas.map(async loja => {
     if (!ids[loja]) { const me = await mlGet(loja, '/users/me'); if (me.status !== 200) return console.error(`[${loja}] sem acesso:`, me.status); ids[loja] = me.body.id; }
     for (const m of modulos) {
+      if (DO_MODULO[m] && !ligado(DO_MODULO[m])) continue;
       const key = loja + ':' + m;
       if (rodando.has(key)) { console.log(`[${loja}] ${m} ainda em execução, pulando`); continue; }
       rodando.add(key);
@@ -39,7 +44,7 @@ export function agendar() {
   cron.schedule('0 5 * * *', safe(['historico']));
   safe(['conta', 'pedidos', 'atendimento', 'itens', 'ads', 'promocoes', 'categorias', 'pagamentos', 'extrato', 'historico', 'faturamento'])(); // ao iniciar (os lentos ficam por último)
   if (shopeeConfigurada()) { // Shopee: pedidos+escrow a cada 5 min, devoluções de hora em hora
-    const sp = (m) => () => rodarShopee(m).catch(e => console.error('sync shopee:', e.message));
+    const sp = (m) => () => (ligado('shopee') ? rodarShopee(m) : Promise.resolve()).catch(e => console.error('sync shopee:', e.message));
     cron.schedule('2-59/5 * * * *', sp(['pedidos'])); cron.schedule('25 * * * *', sp(['devolucoes'])); cron.schedule('35 */3 * * *', sp(['ads'])); cron.schedule('12 * * * *', sp(['itens'])); cron.schedule('45 3 * * *', sp(['promocoes']));
     cron.schedule('* * * * *', sp(['avisos'])); // painel ao vivo e notificações: vendas novas, devoluções e chat
     sp(['pedidos', 'devolucoes', 'ads', 'itens', 'promocoes'])();

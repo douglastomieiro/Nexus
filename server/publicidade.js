@@ -6,6 +6,7 @@ import { LOJAS } from './ml.js';
 import { calcular } from './margem.js';
 import { LOG, hoje, addDias, r2 } from './painel.js';
 import { acaoMLCom, HA } from './acoes.js';
+import { regras } from './preferencias.js';
 
 const erro = (msg, status = 400) => Object.assign(new Error(msg), { status });
 const parse = s => { try { return JSON.parse(s); } catch { return null; } };
@@ -19,7 +20,7 @@ const soma = (L, k) => L.reduce((t, x) => t + (x[k] || 0), 0);
 let cache = { k: '', t: 0, v: null };
 function painel(lojas) {
   const k = lojas.join(','); if (cache.k === k && Date.now() - cache.t < 60e3) return cache.v;
-  const hj = hoje(), d30 = addDias(hj, -29), d60 = addDias(hj, -59), d7 = addDias(hj, -6);
+  const hj = hoje(), d30 = addDias(hj, -29), d60 = addDias(hj, -59), d7 = addDias(hj, -6), acosMax = (regras().acosMax || 0) / 100;
   // resumo: série diária da conta (90 dias) → últimos 30 × 30 anteriores, e os 7 dias
   const dias = []; for (const l of lojas) for (const x of getRaw(l, 'ads_daily', 'conta')?.body?.results || []) dias.push(x);
   const per = (a, b) => { const L = dias.filter(x => x.date >= a && x.date <= b); return { custo: r2(soma(L, 'cost')), receita: r2(soma(L, 'total_amount')), vendas: soma(L, 'units_quantity'), impressoes: soma(L, 'prints'), cliques: soma(L, 'clicks') }; };
@@ -44,7 +45,7 @@ function painel(lojas) {
       status: a.status, statusTxt: ST_AD[a.status] || a.status, campanha: a.campaign_id ? String(a.campaign_id) : null, nomeCampanha: nomeCamp[r.loja + ':' + a.campaign_id] || null, lg: LOG[a.logistic_type] || null,
       recomendado: !!a.recommended, custo90: r2(m.cost), receita90: r2(m.total_amount), vendas90: m.units_quantity || 0, cliques90: m.clicks || 0, acos,
       receita30: p ? r2(p.receita) : 0, ads30: p ? r2(p.ads) : 0, lucro30: p && !p.semCusto ? r2(p.lucro) : null, lucroAntes30: p && !p.semCusto ? r2(p.lucro + p.ads) : null, margemPre, margemPos: p && !p.semCusto && p.receita ? p.lucro / p.receita : null,
-      prejuizo: margemPre != null && acos != null && acos > margemPre });
+      prejuizo: acos != null && ((margemPre != null && acos > margemPre) || (acosMax > 0 && acos > acosMax)) });
   }
   const v = { resumo: { atual, anterior, semana }, campanhas: campanhas.sort((a, b) => (b.status === 'active') - (a.status === 'active') || b.custo - a.custo),
     anuncios: anuncios.sort((a, b) => b.custo90 - a.custo90 || b.receita30 - a.receita30), lojas: lojas.map(l => ({ loja: l, nome: LOJAS[l].nome })),

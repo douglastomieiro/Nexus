@@ -33,11 +33,12 @@
       <div class="box"><div class="boxh"><h3>Anúncios patrocinados</h3><small>gasto e receita de 90 dias · margem e lucro dos últimos 30 dias</small></div>
         <div class="vd-f" style="margin-bottom:10px"><label style="flex:1;min-width:200px">Buscar<input type="search" id="paq" placeholder="Título ou MLB"></label>
           <label>Conta<select id="pac"><option value="">Todas</option>${D.lojas.map(l => `<option value="${esc(l.loja)}">${esc(l.nome)}</option>`).join('')}</select></label>
-          <label>Mostrar<select id="pas"><option value="ativos">Ativos</option><option value="prejuizo">Com prejuízo</option><option value="semvenda">Gasto sem venda</option><option value="sugeridos">Sugeridos pelo ML</option><option value="fora">Fora de campanha</option><option value="pausados">Pausados</option><option value="retidos">Retidos</option><option value="">Todos</option></select></label></div>
+          <label>Mostrar<select id="pas"><option value="ativos">Ativos</option><option value="prejuizo">Com prejuízo</option><option value="semvenda">Gasto sem venda</option><option value="sugeridos">Sugeridos pelo ML</option><option value="fora">Fora de campanha</option><option value="pausados">Pausados</option><option value="retidos">Retidos</option><option value="">Todos</option></select></label><span id="pafs"></span></div>
         <div class="tw" style="max-height:none"><table class="rt"><thead><tr><th>Anúncio</th><th>Situação / campanha</th><th class="n">Investido</th><th class="n">Receita Ads</th><th class="n">ACOS</th><th class="n">Margem antes</th><th class="n">Margem depois</th><th class="n">Lucro 30 dias</th><th>Ações</th></tr></thead><tbody id="pab"></tbody></table></div></div>`;
     $('#pas').value = F.so; $('#pac').value = F.conta; $('#paq').value = F.q;
     $('#pas').onchange = $('#pac').onchange = $('#paq').oninput = () => { F.so = $('#pas').value; F.conta = $('#pac').value; F.q = $('#paq').value.trim().toLowerCase(); desenhaAnuncios(); };
     document.querySelectorAll('[data-pf]').forEach(c => c.onclick = () => { F.so = c.dataset.pf; $('#pas').value = F.so; desenhaAnuncios(); $('#pab').closest('.box').scrollIntoView({ behavior: 'smooth' }); });
+    window.filtrosSalvos?.($('#pafs'), 'publicidade', () => ({ ...F }), f => { Object.assign(F, f); $('#pas').value = F.so; $('#pac').value = F.conta; $('#paq').value = F.q; desenhaAnuncios(); });
     $('#pcb').onclick = acaoCampanha; $('#pab').onclick = acaoAnuncio; $('#pab').onchange = e => { if (e.target.matches('select[data-mv]') && e.target.value) acaoAnuncio({ target: e.target }); };
     desenhaCampanhas(); desenhaAnuncios();
   };
