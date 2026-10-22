@@ -30,35 +30,47 @@ const OPCOES = { REQUEST_VARIANTS: 'Pedir a variação (cor, tamanho…)', REQUE
   DELIVERY_PROMISE: 'Informar o prazo de entrega (Flex)', OTHER: 'Outro assunto' };
 
 // ───────── lista ─────────
+// menor nº de pedido criado a partir do dia: os números do ML crescem com o tempo, então a busca filtra pelo nº (rápido, pela chave)
+// em vez de abrir o JSON de todos os pedidos; calculado uma vez por conta e dia
+const limites = new Map();
+const desdeId = (loja, dia) => { const k = loja + '|' + dia; if (!limites.has(k)) { if (limites.size > 50) limites.clear();
+  limites.set(k, db.prepare(`SELECT min(chave) c FROM raw WHERE recurso='order' AND loja=? AND json_extract(body,'$.date_created') >= ?`).get(loja, dia)?.c || '~'); } return limites.get(k); };
 let cache = { k: '', t: 0, v: null };
 function lista(lojas) {
   const k = lojas.join(','); if (cache.k === k && Date.now() - cache.t < 45e3) return cache.v;
   const desde = addDias(hoje(), -44), spL = shopeeDoFiltro(lojas), an = anuncios(), agora = Date.now(), lim30 = agora - 30 * 864e5;
   const fimHoje = Date.parse(addDias(hoje(), 1) + 'T03:00:00Z');
-  const contas = {}; try { for (const p of calcular({ lojas, desde }).pedidosTodos) contas[p.loja + ':' + p.id] = p; } catch (e) { console.error('[vendas] conta:', e.message); }
+  // conta de 30 dias: o mesmo cálculo das telas de anúncios, Ads e Resumo (fica em cache e não refaz); venda mais antiga aparece sem conta
+  const contas = {}; try { for (const p of calcular({ lojas, desde: addDias(hoje(), -29) }).pedidosTodos) contas[p.loja + ':' + p.id] = p; } catch (e) { console.error('[vendas] conta:', e.message); }
   const conta = p => p ? { receita: r2(p.receita), frete: r2(p.frete), freteNF: r2(p.freteNF), ads: r2(p.ads), lucro: r2(p.lucro), margem: p.receita ? p.lucro / p.receita : 0, semCusto: (p.flags || []).includes('sem custo') } : null;
   const abertas = db.prepare(`SELECT loja, json_extract(body,'$.resource_id') r, json_extract(body,'$.type') t FROM raw WHERE recurso='claim' AND status=200 AND json_extract(body,'$.status')='opened'`).all().filter(x => lojas.includes(x.loja));
   const recAberta = new Set(abertas.map(x => x.loja + ':' + x.r));
   const linhas = [];
-  for (const r of db.prepare(`SELECT loja, body FROM raw WHERE recurso='order' AND status=200 AND loja IN (${ph(lojas)}) AND json_extract(body,'$.date_created') >= ?`).iterate(...lojas, desde)) {
+  // só os campos usados de envios, prazos e notas (ler o corpo inteiro de cada um deixava a lista lenta)
+  const campos = (rec, sel) => { const m = {}; for (const x of db.prepare(`SELECT loja, chave, status, ${sel} FROM raw WHERE recurso='${rec}' AND loja IN (${ph(lojas)})`).iterate(...lojas)) m[x.loja + ':' + x.chave] = x; return m; };
+  const ENV = campos('shipment', `json_extract(body,'$.id') id, json_extract(body,'$.status') st, json_extract(body,'$.substatus') sub, json_extract(body,'$.logistic_type') lg,
+    json_extract(body,'$.tracking_number') rastreio, json_extract(body,'$.date_first_printed') impresso, json_extract(body,'$.receiver_address.state.id') uf`);
+  const SLA = campos('shipment_sla', `json_extract(body,'$.expected_date') d, json_extract(body,'$.status') s`), NF = campos('invoice', `json_extract(body,'$.status') s`);
+  const pedidos = lojas.flatMap(l => db.prepare(`SELECT loja, body FROM raw WHERE recurso='order' AND status=200 AND loja=? AND chave >= ? AND length(chave) = length(?)`).all(l, desdeId(l, desde), desdeId(l, desde)));
+  for (const r of pedidos) {
     const o = parse(r.body); if (!o?.id || NAO_PAGO.has(o.status)) continue;
-    const sid = o.shipping?.id, s0 = sid ? getRaw(r.loja, 'shipment', sid)?.body : null, s = s0?.id ? s0 : null;
-    const sla = sid ? getRaw(r.loja, 'shipment_sla', sid)?.body : null, prazo = iso(sla?.expected_date), st = s?.status || null, sub = s?.substatus || null, full = s?.logistic_type === 'fulfillment';
+    const sid = o.shipping?.id, e = sid ? ENV[r.loja + ':' + sid] : null, s = e?.status === 200 && e.id ? e : null, sla = sid ? SLA[r.loja + ':' + sid] : null;
+    const prazo = iso(sla?.d), st = s?.st || null, sub = s?.sub || null, full = s?.lg === 'fulfillment';
     const aba = o.status === 'cancelled' || (st && FINAL.has(st)) ? 'finalizadas' : st === 'shipped' || TRANSITO.has(sub) ? 'transito' : full ? 'full'
       : !st ? 'proximos' : !prazo ? (st === 'ready_to_ship' ? 'hoje' : 'proximos') : Date.parse(prazo) < fimHoje ? 'hoje' : 'proximos';
     if (aba === 'finalizadas' && Date.parse(o.date_created) < lim30) continue;
-    const p = contas[r.loja + ':' + o.id], nf = getRaw(r.loja, 'invoice', String(o.id)), i0 = o.order_items?.[0];
+    const p = contas[r.loja + ':' + o.id], nf = NF[r.loja + ':' + o.id], i0 = o.order_items?.[0];
     linhas.push({ canal: 'ml', loja: r.loja, nomeLoja: LOJAS[r.loja].nome, id: String(o.id), pack: o.pack_id ? String(o.pack_id) : null, data: iso(o.date_created), aba, comprador: o.buyer?.nickname || null,
       itens: (o.order_items || []).map(i => ({ titulo: i.item.title, qtd: i.quantity, sku: i.item.seller_sku || null, variacao: (i.item.variation_attributes || []).map(v => v.value_name).join(' · ') })),
       thumb: an[r.loja + ':' + i0?.item?.id]?.thumb || null, total: o.total_amount, cancelado: o.status === 'cancelled',
-      envio: s ? { id: String(sid), status: ST[st] || st, sub: SUB[sub] || (sub ? sub.replace(/_/g, ' ') : null), subId: sub, logistica: LOG[s.logistic_type] || 'Padrão', prazo, rastreio: s.tracking_number || null,
-        atrasado: aba === 'hoje' && (sla?.status === 'delayed' || (!!prazo && Date.parse(prazo) < agora)), imprimir: !full && st === 'ready_to_ship' && IMPRIMIVEL.has(sub),
-        impressa: !!s.date_first_printed || sub === 'printed', nfPendente: sub === 'invoice_pending', uf: (s.receiver_address?.state?.id || '').replace('BR-', '') || null } : null,
-      nota: nf?.status === 200 && nf.body?.status ? (nf.body.status === 'authorized' ? 'emitida' : String(nf.body.status)) : null,
+      envio: s ? { id: String(sid), status: ST[st] || st, sub: SUB[sub] || (sub ? sub.replace(/_/g, ' ') : null), subId: sub, logistica: LOG[s.lg] || 'Padrão', prazo, rastreio: s.rastreio || null,
+        atrasado: aba === 'hoje' && (sla?.s === 'delayed' || (!!prazo && Date.parse(prazo) < agora)), imprimir: !full && st === 'ready_to_ship' && IMPRIMIVEL.has(sub),
+        impressa: !!s.impresso || sub === 'printed', nfPendente: sub === 'invoice_pending', uf: (s.uf || '').replace('BR-', '') || null } : null,
+      nota: nf?.status === 200 && nf.s ? (nf.s === 'authorized' ? 'emitida' : String(nf.s)) : null,
       conta: conta(p), reclamacao: recAberta.has(r.loja + ':' + o.id), publicidade: !!(p?.ads > 0) });
   }
   if (spL.length) {
-    const cs = {}; try { for (const p of calcularShopee({ lojas: spL, desde }).pedidosTodos) cs[p.loja + ':' + p.id] = p; } catch (e) { console.error('[vendas] conta Shopee:', e.message); }
+    const cs = {}; try { for (const p of calcularShopee({ lojas: spL, desde: addDias(hoje(), -29) }).pedidosTodos) cs[p.loja + ':' + p.id] = p; } catch (e) { console.error('[vendas] conta Shopee:', e.message); }
     const ini = Date.parse(desde + 'T03:00:00Z') / 1000;
     for (const r of db.prepare(`SELECT loja, body FROM raw WHERE recurso='sp_order' AND status=200 AND loja IN (${ph(spL)}) AND json_extract(body,'$.create_time') >= ?`).iterate(...spL, ini)) {
       const o = parse(r.body), st = o?.order_status; if (!o?.order_sn || st === 'UNPAID') continue;
@@ -84,6 +96,9 @@ function lista(lojas) {
     ultimaColeta: db.prepare(`SELECT max(coletado_em) t FROM raw WHERE recurso IN ('order','shipment') AND loja IN (${ph(lojas)})`).get(...lojas)?.t || null, linhas };
   cache = { k, t: Date.now(), v }; return v;
 }
+
+// contagens e cartões da lista (para o Resumo)
+export const cartoesVendas = lojas => { const v = lista(lojas); return { contagem: v.contagem, cards: v.cards }; };
 
 // relê os envios no ML depois de uma ação (etiqueta impressa, NF-e anexada), para a lista mostrar o estado novo sem esperar a coleta
 async function atualizaEnvios(loja, ids) {

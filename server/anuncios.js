@@ -66,6 +66,9 @@ function lista(lojas) {
   cache = { k, t: Date.now(), v }; return v;
 }
 
+// cartões da lista (para o Resumo)
+export const cartoesAnuncios = lojas => lista(lojas).cards;
+
 // ───────── ficha de edição ─────────
 async function ficha(loja, id) {
   let it = itemDe(loja, id), aoVivo = false;

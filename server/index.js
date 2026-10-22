@@ -20,6 +20,7 @@ import { registrarAtendimento } from './atendimento.js';
 import { registrarVendas } from './vendas.js';
 import { registrarAnuncios } from './anuncios.js';
 import { registrarPublicidade } from './publicidade.js';
+import { registrarResumo } from './resumo.js';
 import { registrarDescontos } from './descontos/rotas.js';
 import { registrarShopee, alertasShopee } from './shopee-rotas.js';
 import { registrarContas } from './contas-rotas.js';
@@ -236,6 +237,7 @@ registrarAtendimento(app); // perguntas, mensagens, reclamações e respostas pr
 registrarVendas(app, { H, lojasSel }); // lista de despacho, etiquetas, notas internas, NF-e e iniciar conversa
 registrarAnuncios(app, { H, lojasSel }); // gestão de anúncios: margem, preço mínimo e ações (status, preço, estoque, título, fotos, ficha)
 registrarPublicidade(app, { H, lojasSel }); // Product Ads: campanhas e anúncios patrocinados com ações e lucro depois do Ads
+registrarResumo(app, { H, lojasSel }); // tela inicial: pendências, semana, reputação, envios e fatura
 app.get('/api/config', H(() => ({ ...getConfig(), auto: Object.fromEntries(Object.keys(nomes).map(l => { const a = aliquotaAuto(l); return [l, a && { cnpj: a.cnpj, nome: a.nome, anexo: a.anexo, meses: Object.entries(a.meses).slice(-6).map(([mes, v]) => ({ mes, ...v })) }]; })) })));
 app.post('/api/config', H((_, req) => { for (const k of [...Object.keys(nomes).map(l => 'aliquota_' + l), 'devolucao_perde_produto']) if (req.body[k] != null) {
     const v = Number(req.body[k]); if (!Number.isFinite(v) || v < 0 || v > 100) throw Object.assign(new Error(`valor inválido para ${k}`), { status: 400 });

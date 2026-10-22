@@ -167,6 +167,8 @@ const DEV_ST = { pending: 'Criando o envio', label_generated: 'Etiqueta pronta: 
 const ENV_ST = { pending: 'criado', ready_to_ship: 'pronto para postar', shipped: 'a caminho', not_delivered: 'não entregue', delivered: 'entregue', cancelled: 'cancelado' };
 const DINHEIRO = { retained: 'retido pelo Mercado Livre', refunded: 'devolvido ao comprador', available: 'liberado para você' };
 const REEMB = { shipped: 'quando o comprador postar o produto', delivered: '3 dias depois de o produto chegar', 'n/a': 'sem devolução do produto (baixo valor)' };
+// o ML responde "affected" / "not_affected" (texto), não true/false
+const afeta = v => v === true || /^affect/i.test(String(v ?? ''));
 const acoesDe = c => (c?.players || []).find(p => p.role === 'respondent')?.available_actions || [];
 function reclamacoes(q) {
   const desde = Date.now() - (Math.min(Math.max(parseInt(q.dias) || 60, 1), 365)) * 864e5, out = [];
@@ -178,7 +180,7 @@ function reclamacoes(q) {
     out.push({ loja: r.loja, nomeLoja: LOJAS[r.loja].nome, id: String(c.id), tipo: TIPO[c.type] || c.type, etapa: ETAPA[c.stage] || c.stage, aberta: c.status === 'opened', data: iso(c.date_created), atualizada: iso(c.last_updated),
       motivo: getRaw(r.loja, 'claim_reason', c.reason_id)?.body?.detail || c.reason_id, pedido: String(c.resource_id), prazo: iso(prazo),
       acoes: ac.map(a => ({ acao: a.action, txt: ACOES_REC[a.action]?.txt || a.action, obrigatoria: !!a.mandatory, prazo: iso(a.due_date) })),
-      afetaReputacao: af && typeof af === 'object' ? !!(af.affects_reputation ?? af.affectsReputation) : null,
+      afetaReputacao: af && typeof af === 'object' ? afeta(af.affects_reputation ?? af.affectsReputation) : null,
       resolucao: c.resolution ? (c.resolution.reason || c.resolution.benefited?.join?.(', ') || 'resolvida') : null,
       produto: o?.order_items?.[0]?.item?.title || null, thumb: anuncios()[r.loja + ':' + o?.order_items?.[0]?.item?.id]?.thumb || null, valor: o?.total_amount ?? null, comprador: o?.buyer?.nickname || null,
       perda: contaPerda(r.loja, String(c.resource_id), c.id) });

@@ -53,6 +53,9 @@ function painel(lojas) {
   cache = { k, t: Date.now(), v }; return v;
 }
 
+// cartões e resumo de 30 dias (para o Resumo)
+export const cartoesPub = lojas => { const v = painel(lojas); return { cartoes: v.cartoes, resumo: v.resumo }; };
+
 // a mudança vale na hora na tela (a próxima coleta de Ads traz o estado do ML)
 const patch = (loja, recurso, chave, mud) => { const b = getRaw(loja, recurso, chave)?.body; if (b) saveRaw(loja, recurso, chave, 'acao', 200, { ...b, ...mud }); cache.t = 0; };
 
