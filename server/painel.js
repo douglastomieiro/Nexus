@@ -7,6 +7,12 @@ import { calcularShopee } from './shopee-margem.js';
 import { estoquePorSku, vendas30, shopeeDoFiltro } from './recompra.js';
 
 export const LOG = { fulfillment: 'Full', self_service: 'Flex', xd_drop_off: 'Padrão', cross_docking: 'Padrão', drop_off: 'Padrão', default: 'Padrão' };
+// situação do envio do ML (substatus) em português
+export const SUBSTATUS = { ready_to_print: 'Etiqueta pronta para imprimir', printed: 'Etiqueta impressa', invoice_pending: 'Falta anexar a NF-e', buffered: 'Etiqueta ainda não liberada', shipment_paid: 'Frete pago',
+  dropped_off: 'Entregue na agência', picked_up: 'Coletado', in_hub: 'No centro de distribuição', in_warehouse: 'No centro do Full', packed: 'Embalado no Full', ready_to_pack: 'Em separação no Full',
+  in_packing_list: 'Em separação no Full', waiting_for_withdrawal: 'Aguardando retirada', receiver_absent: 'Destinatário ausente', out_for_delivery: 'Saiu para entrega', at_the_door: 'Na porta do comprador',
+  soon_deliver: 'Chega em breve', returning_to_sender: 'Voltando para você', returning_to_warehouse: 'Voltando ao Full', returned_to_warehouse: 'Voltou ao Full', returned: 'Devolvido a você',
+  lost: 'Extraviado', stolen: 'Roubado', pack_splitted: 'Pacote dividido', unfulfillable: 'Sem estoque no Full', service_unavailable: 'Serviço indisponível' };
 export const hoje = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
 export const addDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
 export const diaBR = s => new Date(Date.parse(s) - 3 * 3600e3).toISOString().slice(0, 10); // dia comercial (fuso de Brasília); o ML devolve -04:00

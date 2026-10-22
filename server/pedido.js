@@ -5,7 +5,7 @@ import { LOJAS } from './ml.js';
 import { SHOPEE } from './shopee.js';
 import { calcular } from './margem.js';
 import { calcularShopee } from './shopee-margem.js';
-import { LOG, hoje, addDias, diaBR, r2, envios, anuncios, spThumb } from './painel.js';
+import { LOG, SUBSTATUS, hoje, addDias, diaBR, r2, envios, anuncios, spThumb } from './painel.js';
 import { shopeeDoFiltro } from './recompra.js';
 
 const erro = (msg, status = 400) => Object.assign(new Error(msg), { status });
@@ -60,7 +60,11 @@ function fichaML(loja, id) {
       freteComprador: x.shipping_cost || 0, reembolsado: x.transaction_amount_refunded || 0, status: x.status, data: iso(x.date_approved) })),
     envio: sid ? { id: String(sid), logistica: s?.logistic_type ? LOG[s.logistic_type] || 'Padrão' : null, status: ENVIO_ML[s?.status] || s?.status || null, rastreio: s?.tracking_number || null, transportadora: s?.tracking_method || null,
       custoVendedor: sc ? r2((sc.senders || []).reduce((t, x) => t + (x.cost || 0), 0)) : null, freteComprador: sc?.receiver?.cost ?? null, prazoEntrega: iso(s?.shipping_option?.estimated_delivery_final?.date),
-      atraso: sla?.status === 'delayed' } : null,
+      atraso: sla?.status === 'delayed', despacharAte: iso(sla?.expected_date), situacao: s?.substatus ? SUBSTATUS[s.substatus] || s.substatus.replace(/_/g, ' ') : null,
+      imprimir: !!s && s.logistic_type !== 'fulfillment' && s.status === 'ready_to_ship' && ['ready_to_print', 'printed'].includes(s.substatus),
+      endereco: s?.receiver_address ? { destinatario: s.receiver_address.receiver_name || null, linha: s.receiver_address.address_line || null, bairro: s.receiver_address.neighborhood?.name || null,
+        cidade: s.receiver_address.city?.name || null, uf: (s.receiver_address.state?.id || '').replace('BR-', '') || null, cep: s.receiver_address.zip_code || null, referencia: s.receiver_address.comment || null } : null,
+      origem: s?.sender_address?.city?.name ? `${s.sender_address.city.name}${s.sender_address.state?.id ? ' / ' + s.sender_address.state.id.replace('BR-', '') : ''}` : null } : null,
     nota: nf ? { status: nf.status === 'authorized' ? 'Autorizada' : nf.status, numero: nf.invoice_number, serie: nf.invoice_series, chave: nf.attributes?.invoice_key || null, data: iso(nf.attributes?.authorization_date || nf.issued_date),
       valor: nf.amount ?? null, frete: r2((nf.items || []).filter(i => String(i.external_order_id) === String(id)).reduce((t, i) => t + (i.shipping_buyer_cost || 0), 0)) } : null,
     conta: conta(p),

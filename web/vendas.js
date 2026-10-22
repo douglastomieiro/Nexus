@@ -60,6 +60,7 @@
     const ext = F.extrato ? F.extrato.map(x => L(esc(x.txt), x.total ? `<b>${brl(x.valor)}</b>` : x.valor < 0 ? neg(x.valor) : brl(x.valor), x.total ? 'sub' : '')).join('') : '';
     const E = F.envio, envio = E ? [L('Logística', E.logistica ? `<span class="lgt ${esc(E.logistica)}" style="margin:0">${esc(E.logistica)}</span>` : '—'), L('Status', esc(E.status || '—') + (E.atraso ? ' <span class="tag bad">atrasado</span>' : '')),
       E.transportadora ? L('Transportadora', esc(E.transportadora)) : '', E.rastreio ? L('Rastreio', esc(E.rastreio)) : '', E.prazoEntrega ? L('Previsão de entrega', new Date(E.prazoEntrega).toLocaleDateString('pt-BR')) : '',
+      E.situacao ? L('Situação do envio', esc(E.situacao)) : '', E.despacharAte ? L('Despachar até', quando(E.despacharAte)) : '', E.origem ? L('Sai de', esc(E.origem)) : '',
       E.custoVendedor != null ? L('Frete pago por você', brl(E.custoVendedor)) : '', E.freteComprador != null ? L('Frete pago pelo comprador', brl(E.freteComprador)) : '', F.prazoDespacho ? L('Despachar até', quando(F.prazoDespacho)) : ''].join('') : '';
     const N = F.nota, nota = N ? [L('Nota fiscal', `nº ${esc(N.numero)} · série ${esc(N.serie)}`), L('Situação', esc(N.status)), L('Emitida em', quando(N.data)), N.valor != null ? L('Valor da nota', brl(N.valor)) : '',
       L('Frete na nota', N.frete ? brl(N.frete) : 'não teve'), N.chave ? `<div class="fc-nota">Chave: <code style="word-break:break-all">${esc(N.chave)}</code></div>` : ''].join('')
@@ -74,10 +75,13 @@
     const tempo = F.tempo.length ? `<ul class="fc-tl">${F.tempo.map(t => `<li><small>${quando(t.data)}</small>${esc(t.txt)}</li>`).join('')}</ul>` : '';
     $('#db').innerHTML = `<div class="fc-top">${canalChip(F.canal, F.loja)}<span class="tag ${F.cancelado ? 'bad' : ''}">${esc(F.status)}</span><small style="color:var(--mut)">${quando(F.data)}</small>
         <a class="btn2" style="margin-left:auto;text-decoration:none" target="_blank" rel="noopener" href="${esc(F.link)}">${ic('ext', 13)}${ml ? 'Abrir no Mercado Livre' : 'Abrir na Shopee'}</a></div>
-      ${sec('Produtos', itens)}${sec('Conta do pedido', conta)}${sec('Extrato da Shopee (repasse)', ext)}${sec('Envio', envio)}${sec('Nota fiscal', nota)}${sec('Pagamento', pag)}
-      ${sec('Comprador', [F.comprador.apelido ? L('Apelido', esc(F.comprador.apelido)) : '', F.comprador.cidade ? L('Destino', `${esc(F.comprador.cidade)}${F.comprador.uf ? ' / ' + esc(F.comprador.uf) : ''}`) : '', F.pack ? L('Carrinho (pack)', esc(F.pack)) : ''].join(''))}
+      <div id="fca"></div>${sec('Produtos', itens)}${sec('Conta do pedido', conta)}${sec('Extrato da Shopee (repasse)', ext)}${sec('Envio', envio)}${sec('Nota fiscal', nota)}${sec('Pagamento', pag)}
+      ${sec('Comprador', [F.comprador.apelido ? L('Apelido', esc(F.comprador.apelido)) : '', ...(E?.endereco ? [E.endereco.destinatario ? L('Quem recebe', esc(E.endereco.destinatario)) : '',
+        E.endereco.linha ? L('Endereço', `${esc(E.endereco.linha)}${E.endereco.bairro ? ' · ' + esc(E.endereco.bairro) : ''}`) : '', E.endereco.cep ? L('CEP', esc(E.endereco.cep)) : '',
+        E.endereco.referencia ? L('Referência', esc(E.endereco.referencia)) : ''] : []), F.comprador.cidade ? L('Destino', `${esc(F.comprador.cidade)}${F.comprador.uf ? ' / ' + esc(F.comprador.uf) : ''}`) : '', F.pack ? L('Carrinho (pack)', esc(F.pack)) : ''].join(''))}
       ${sec('Devolução', dev)}${sec('Reclamações', rec)}${sec('Linha do tempo', tempo)}${sec('Mensagens', msgs)}
       ${ml ? `<p class="fc-nota"><a class="lk lv" href="#" data-t="order" data-i="${esc(F.id)}" data-l="${esc(F.loja)}">Ver o retorno da API deste pedido { }</a></p>` : ''}`;
+    window.fichaAcoes?.(F); // ações da venda (etiqueta, nota interna, NF-e, mensagem): vendas-lista.js
   }
   window.abreFicha = abreFicha;
   // abre a ficha de qualquer elemento com data-ficha="conta|pedido" (linha de tabela ou nº do pedido); links e botões dentro da linha continuam com a ação deles

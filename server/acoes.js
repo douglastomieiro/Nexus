@@ -38,19 +38,36 @@ export async function acaoML(loja, tipo, alvo, metodo, caminho, corpo) {
   return resposta;
 }
 
-// Anexo (multipart): o arquivo chega da tela em base64. Devolve a resposta do ML (com o id/nome do anexo).
-export async function enviaArquivo(loja, tipo, alvo, caminho, { nome, mime, base64 }) {
-  const id = vendedorDe(loja), pedido = { metodo: 'POST', caminho, arquivo: nome, bytes: Math.round((base64 || '').length * 0.75) };
-  if (SIMULADO) { const r = { id: `simulado_${Date.now()}_${nome}`, filename: `simulado_${nome}` }; registra(loja, tipo, alvo, pedido, 200, true, r); return r; }
+// Anexos (multipart): os arquivos chegam da tela em base64 e vão juntos no mesmo pedido, no campo `campo`. Devolve a resposta do ML (id/nome do anexo).
+export async function enviaArquivos(loja, tipo, alvo, caminho, arquivos, campo = 'file') {
+  const id = vendedorDe(loja), pedido = { metodo: 'POST', caminho, arquivo: arquivos.map(a => a.nome).join(', '), bytes: arquivos.reduce((t, a) => t + Math.round((a.base64 || '').length * 0.75), 0) };
+  if (SIMULADO) { const nome = arquivos[0]?.nome; const r = { id: `simulado_${Date.now()}_${nome}`, filename: `simulado_${nome}`, ids: arquivos.map((a, i) => `simulado_${i}_${a.nome}`) }; registra(loja, tipo, alvo, pedido, 200, true, r); return r; }
   let status = 0, resposta = null, ok = false;
   try {
-    const fd = new FormData(); fd.append('file', new Blob([Uint8Array.from(atob(base64), c => c.charCodeAt(0))], { type: mime || 'application/octet-stream' }), nome);
+    const fd = new FormData();
+    for (const { nome, mime, base64 } of arquivos) fd.append(campo, new Blob([Uint8Array.from(atob(base64), c => c.charCodeAt(0))], { type: mime || 'application/octet-stream' }), nome);
     const res = await fetch(API + caminho, { method: 'POST', headers: { Authorization: `Bearer ${await tokenDe(id)}` }, body: fd, signal: AbortSignal.timeout(60000) });
     status = res.status; const tx = await res.text(); try { resposta = JSON.parse(tx); } catch { resposta = { message: tx }; } ok = res.ok;
   } catch (e) { resposta = { message: e.message }; }
   registra(loja, tipo, alvo, pedido, status, ok, resposta);
-  if (!ok) throw Object.assign(erro(status ? traduz(status, resposta) : `Não foi possível enviar o anexo: ${resposta.message}`, 502), { ml: resposta });
+  if (!ok) throw Object.assign(erro(status ? traduz(status, resposta) : `Não foi possível enviar o arquivo: ${resposta.message}`, 502), { ml: resposta });
   return resposta;
+}
+export const enviaArquivo = (loja, tipo, alvo, caminho, arquivo) => enviaArquivos(loja, tipo, alvo, caminho, [arquivo]);
+
+// Download (etiquetas): devolve { tipo, buf } com o arquivo do ML. `simulado` = o que devolver no modo de teste.
+export async function baixaML(loja, tipo, alvo, caminho, simulado) {
+  const id = vendedorDe(loja), pedido = { metodo: 'GET', caminho };
+  if (SIMULADO) { registra(loja, tipo, alvo, pedido, 200, true, { simulado: true, bytes: simulado.buf.length }); return simulado; }
+  let status = 0, resposta = null;
+  try {
+    const res = await fetch(API + caminho, { headers: { Authorization: `Bearer ${await tokenDe(id)}` }, signal: AbortSignal.timeout(60000) });
+    status = res.status; const buf = new Uint8Array(await res.arrayBuffer()), ct = res.headers.get('content-type') || '';
+    if (res.ok && !/json/.test(ct)) { registra(loja, tipo, alvo, pedido, status, true, { bytes: buf.length, tipo: ct }); return { tipo: ct, buf }; }
+    const tx = new TextDecoder().decode(buf); try { resposta = JSON.parse(tx); } catch { resposta = { message: tx.slice(0, 300) }; }
+  } catch (e) { resposta = { message: e.message }; }
+  registra(loja, tipo, alvo, pedido, status, false, resposta);
+  throw Object.assign(erro(status ? traduz(status, resposta) : `Não foi possível baixar do Mercado Livre: ${resposta.message}`, 502), { ml: resposta });
 }
 
 // rotas assíncronas (o H do index.js é síncrono)
