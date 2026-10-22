@@ -19,6 +19,7 @@ export async function rodar(modulos, { lojas = Object.keys(LOJAS), force = false
       const c = ctx(loja, { force, meses }, ids[loja]); const t0 = Date.now();
       try { await MODULOS[m](c); } catch (e) { c.log(`✖ ${m}:`, e.message); c.st.erros++; }
       finally { rodando.delete(key); }
+      if (m === 'avisos' && !c.st.erros) continue; // roda a cada minuto: só registra quando der erro
       logColeta({ loja, modulo: m, inicio: t0, fim: Date.now(), chamadas: c.st.chamadas, ok: c.st.ok, erros: c.st.erros, obs: null });
       c.log(`✔ ${m} ${((Date.now() - t0) / 1000).toFixed(1)}s | chamadas ${c.st.chamadas} ok ${c.st.ok} erros ${c.st.erros}`);
     }
@@ -28,6 +29,7 @@ export async function rodar(modulos, { lojas = Object.keys(LOJAS), force = false
 export function agendar() {
   const safe = (mods) => () => rodar(mods).catch(e => console.error('sync:', e.message));
   cron.schedule('*/5 * * * *', safe(['pedidos', 'atendimento']));
+  cron.schedule('* * * * *', safe(['avisos'])); // notificações: perguntas e mensagens novas
   cron.schedule('20 * * * *', safe(['pagamentos']));
   cron.schedule('40 * * * *', safe(['extrato']));
   cron.schedule('7 * * * *', safe(['itens']));
@@ -39,7 +41,8 @@ export function agendar() {
   if (shopeeConfigurada()) { // Shopee: pedidos+escrow a cada 5 min, devoluções de hora em hora
     const sp = (m) => () => rodarShopee(m).catch(e => console.error('sync shopee:', e.message));
     cron.schedule('2-59/5 * * * *', sp(['pedidos'])); cron.schedule('25 * * * *', sp(['devolucoes'])); cron.schedule('35 */3 * * *', sp(['ads'])); cron.schedule('12 * * * *', sp(['itens'])); cron.schedule('45 3 * * *', sp(['promocoes']));
+    cron.schedule('1-59/2 * * * *', sp(['avisos'])); // notificações: devoluções novas e chat
     sp(['pedidos', 'devolucoes', 'ads', 'itens', 'promocoes'])();
   }
-  console.log('Agendador ativo: pedidos/atendimento 5 min · anúncios 1h · conta/promoções/categorias 03:30 · faturamento 04:30');
+  console.log('Agendador ativo: avisos 1 min · pedidos/atendimento 5 min · anúncios 1h · conta/promoções/categorias 03:30 · faturamento 04:30');
 }

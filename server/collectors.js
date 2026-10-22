@@ -241,6 +241,25 @@ async function atendimento(c) {
   await pool([...packs], CONC, pk => c.fetchSave('messages_pack', pk, `/messages/packs/${pk}/sellers/${u}?tag=post_sale`, { maxAge: 5 * MIN }));
 }
 
+// ───────────── AVISOS (a cada minuto): perguntas sem resposta e mensagens não lidas, para as notificações ─────────────
+// A lista das sem resposta fica guardada (avisos_perguntas): a pergunta respondida some do aviso sem esperar o atendimento renovar o status dela.
+async function avisos(c) {
+  const u = c.user, ids = [];
+  let completa = true;
+  for (let off = 0; off < 1000; ) {
+    const r = await c.get(`/questions/search?seller_id=${u}&api_version=4&status=UNANSWERED&sort_fields=date_created&sort_types=DESC&limit=50&offset=${off}`);
+    if (r.status !== 200) { completa = false; break; }
+    const qs = r.body.questions || [];
+    for (const q of qs) { saveRaw(c.loja, 'question', q.id, 'questions/search', 200, q); ids.push(q.id); }
+    off += qs.length;
+    if (!qs.length || off >= (r.body.total ?? 0)) break;
+  }
+  if (completa) saveRaw(c.loja, 'avisos_perguntas', u, 'questions/search', 200, { ids, ts: Date.now() });
+  const unread = await c.fetchSave('messages_unread', u, '/messages/unread?role=seller&tag=post_sale');
+  const packs = new Set(JSON.stringify(unread?.results || []).match(/packs\/(\d+)/g)?.map(s => s.slice(6)) || []);
+  await pool([...packs], CONC, pk => c.fetchSave('messages_pack', pk, `/messages/packs/${pk}/sellers/${u}?tag=post_sale`, { maxAge: MIN }));
+}
+
 // ───────────── PROMOÇÕES (diário) ─────────────
 async function promocoes(c) {
   const u = c.user;
@@ -419,7 +438,7 @@ async function extrato(c) {
   c.log(`extrato de cobranças por pedido: ${alvo.length} candidatos, ${n} consultados`);
 }
 
-export const MODULOS = { conta, itens, pedidos, atendimento, ads, promocoes, categorias, faturamento, historico, pagamentos, extrato };
+export const MODULOS = { conta, itens, pedidos, atendimento, avisos, ads, promocoes, categorias, faturamento, historico, pagamentos, extrato };
 
 // Sob demanda: detalhe ao vivo de uma entidade (cache curto), usado pelo dashboard ao abrir um registro
 export const LIVE = {

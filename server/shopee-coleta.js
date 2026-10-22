@@ -141,7 +141,24 @@ async function promocoes(c) {
   }
 }
 
-export const MODULOS_SP = { pedidos, devolucoes, ads, itens, promocoes };
+// ───── Avisos (a cada 2 min), para as notificações: devoluções abertas nos últimos 3 dias e conversas não lidas do chat.
+// O chat (sellerchat) só funciona se o app da Shopee tiver essa permissão; sem ela, guarda o erro e só tenta de novo depois de 6 horas.
+async function avisos(c) {
+  const agora = Math.floor(Date.now() / 1000);
+  for (let pg = 0; pg < 5; pg++) {
+    const r = await c.get('/api/v2/returns/get_return_list', { page_no: pg, page_size: 100, create_time_from: agora - 3 * DIA, create_time_to: agora });
+    if (!ok(r)) break;
+    for (const x of r.body.response?.return || []) saveRaw(c.loja, 'sp_return', x.return_sn, 'get_return_list', 200, x);
+    if (!r.body.response?.more) break;
+  }
+  const ant = getRaw(c.loja, 'sp_chat', 'nao_lidas');
+  if (ant?.body?.erro && Date.now() - ant.coletado_em < 6 * 3600e3) return;
+  const r = await c.get('/api/v2/sellerchat/get_conversation_list', { direction: 'older', type: 'unread', page_size: 50 });
+  saveRaw(c.loja, 'sp_chat', 'nao_lidas', 'get_conversation_list', ok(r) ? 200 : r.status || 500,
+    ok(r) ? { conversas: r.body.response?.conversations || [] } : { erro: r.body?.error || String(r.status), msg: r.body?.message || '' });
+}
+
+export const MODULOS_SP = { pedidos, devolucoes, ads, itens, promocoes, avisos };
 const rodando = new Set();
 export async function rodarShopee(modulos = Object.keys(MODULOS_SP), { lojas = Object.keys(SHOPEE), force = false, meses = 12 } = {}) {
   await Promise.all(lojas.map(async loja => {
@@ -150,6 +167,7 @@ export async function rodarShopee(modulos = Object.keys(MODULOS_SP), { lojas = O
       rodando.add(key); const c = ctx(loja), t0 = Date.now();
       try { await MODULOS_SP[m](c, { meses, force }); } catch (e) { c.log(`✖ ${m}:`, e.message); c.st.erros++; }
       finally { rodando.delete(key); }
+      if (m === 'avisos' && !c.st.erros) continue; // roda a cada 2 min: só registra quando der erro
       logColeta({ loja, modulo: m, inicio: t0, fim: Date.now(), chamadas: c.st.chamadas, ok: c.st.ok, erros: c.st.erros, obs: null });
       c.log(`✔ ${m} ${((Date.now() - t0) / 1000).toFixed(1)}s | chamadas ${c.st.chamadas} ok ${c.st.ok} erros ${c.st.erros}`);
     }
