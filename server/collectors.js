@@ -241,10 +241,16 @@ async function atendimento(c) {
   await pool([...packs], CONC, pk => c.fetchSave('messages_pack', pk, `/messages/packs/${pk}/sellers/${u}?tag=post_sale`, { maxAge: 5 * MIN }));
 }
 
-// ───────────── AVISOS (a cada minuto): perguntas sem resposta e mensagens não lidas, para as notificações ─────────────
+// ───────────── AVISOS (a cada minuto): vendas novas, perguntas sem resposta e mensagens não lidas (painel ao vivo e notificações) ─────────────
 // A lista das sem resposta fica guardada (avisos_perguntas): a pergunta respondida some do aviso sem esperar o atendimento renovar o status dela.
 async function avisos(c) {
   const u = c.user, ids = [];
+  // vendas das últimas 2 horas; de pedido novo já busca o envio e o custo do frete (o resto vem na coleta de 5 em 5 min)
+  const novos = [];
+  await pagina(c, `seller=${u}&order.date_created.from=${encodeURIComponent(iso(Date.now() - 2 * HORA))}&sort=date_desc`, '', o => { if (o.shipping?.id && !getRaw(c.loja, 'shipment', o.shipping.id)) novos.push(o.shipping.id); });
+  await pool(novos, CONC, async sid => {
+    if (await c.fetchSave('shipment', sid, `/shipments/${sid}`)) await c.fetchSave('shipment_costs', sid, `/shipments/${sid}/costs`);
+  });
   let completa = true;
   for (let off = 0; off < 1000; ) {
     const r = await c.get(`/questions/search?seller_id=${u}&api_version=4&status=UNANSWERED&sort_fields=date_created&sort_types=DESC&limit=50&offset=${off}`);

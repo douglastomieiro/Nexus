@@ -2,6 +2,7 @@
 // Mercado Livre: perguntas sem resposta, mensagens pós-venda não lidas e reclamações abertas.
 // Shopee: devoluções esperando ação e conversas não lidas do chat (quando o app tem permissão de chat).
 // Cada item tem um id estável: a tela guarda os já vistos e avisa só dos novos.
+// Também manda as vendas de hoje (vendas), para o aviso de venda nova — essas não entram no contador do sino.
 import { db, getRaw } from './db.js';
 import { LOJAS } from './ml.js';
 import { SHOPEE } from './shopee.js';
@@ -64,12 +65,30 @@ function shopee(loja, itens, avisos) {
   }
 }
 
+// vendas de hoje (dia de Brasília), as mais novas primeiro; só olha o que foi coletado nas últimas 36 h
+function vendasDeHoje() {
+  const hj = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10), ini = Date.parse(hj + 'T03:00:00Z'), rec = Date.now() - 36 * 3600e3, v = [];
+  for (const r of all(`SELECT loja, chave, body FROM raw WHERE recurso='order' AND status=200 AND coletado_em > ?`, rec)) {
+    const o = parse(r.body); if (!o || !LOJAS[r.loja] || o.status === 'cancelled' || Date.parse(o.date_created) < ini) continue;
+    const i = o.order_items?.[0];
+    v.push({ id: `v:${r.loja}:${r.chave}`, pedido: r.chave, canal: 'ml', loja: r.loja, nomeLoja: LOJAS[r.loja].nome, data: iso(o.date_created), valor: o.total_amount ?? 0,
+      titulo: i?.item?.title || '', qtd: (o.order_items || []).reduce((t, x) => t + (x.quantity || 0), 0), outros: (o.order_items?.length || 1) - 1 });
+  }
+  for (const r of all(`SELECT loja, chave, body FROM raw WHERE recurso='sp_order' AND status=200 AND coletado_em > ?`, rec)) {
+    const o = parse(r.body); if (!o || !SHOPEE[r.loja] || o.order_status === 'CANCELLED' || o.create_time * 1000 < ini) continue;
+    const i = o.item_list?.[0];
+    v.push({ id: `v:${r.loja}:${r.chave}`, pedido: r.chave, canal: 'shopee', loja: r.loja, nomeLoja: SHOPEE[r.loja].nome, data: new Date(o.create_time * 1000).toISOString(), valor: o.total_amount ?? 0,
+      titulo: i?.item_name || '', qtd: (o.item_list || []).reduce((t, x) => t + (x.model_quantity_purchased || 1), 0), outros: (o.item_list?.length || 1) - 1 });
+  }
+  return v.sort((a, b) => b.data.localeCompare(a.data)).slice(0, 200);
+}
+
 export function notificacoes() {
   const itens = [], avisos = [];
   for (const l of Object.keys(LOJAS)) mercadoLivre(l, itens);
   for (const l of Object.keys(SHOPEE)) shopee(l, itens, avisos);
   itens.sort((a, b) => String(b.data || '').localeCompare(String(a.data || '')));
-  return { itens, avisos, agora: Date.now() };
+  return { itens, avisos, vendas: vendasDeHoje(), agora: Date.now() };
 }
 
 export function registrarNotificacoes(app, { H }) {

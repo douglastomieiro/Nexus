@@ -141,10 +141,22 @@ async function promocoes(c) {
   }
 }
 
-// ───── Avisos (a cada 2 min), para as notificações: devoluções abertas nos últimos 3 dias e conversas não lidas do chat.
+// ───── Avisos (a cada minuto), para o painel ao vivo e as notificações: vendas novas, devoluções abertas nos últimos 3 dias e conversas não lidas do chat.
 // O chat (sellerchat) só funciona se o app da Shopee tiver essa permissão; sem ela, guarda o erro e só tenta de novo depois de 6 horas.
 async function avisos(c) {
   const agora = Math.floor(Date.now() / 1000);
+  // vendas das últimas 2 horas que ainda não estão no banco (o escrow e as mudanças de status vêm na coleta de 5 em 5 min)
+  const sns = [];
+  for (let cursor = '', pg = 0; pg < 5; pg++) {
+    const r = await c.get('/api/v2/order/get_order_list', { time_range_field: 'create_time', time_from: agora - 7200, time_to: agora, page_size: 100, ...(cursor ? { cursor } : {}) });
+    if (!ok(r)) break;
+    (r.body.response?.order_list || []).forEach(o => { if (!getRaw(c.loja, 'sp_order', o.order_sn)) sns.push(o.order_sn); });
+    if (!r.body.response?.more) break; cursor = r.body.response.next_cursor;
+  }
+  for (const part of chunk(sns, 50)) {
+    const r = await c.get('/api/v2/order/get_order_detail', { order_sn_list: part, response_optional_fields: OPT });
+    if (ok(r)) for (const o of r.body.response?.order_list || []) saveRaw(c.loja, 'sp_order', o.order_sn, 'get_order_detail', 200, o);
+  }
   for (let pg = 0; pg < 5; pg++) {
     const r = await c.get('/api/v2/returns/get_return_list', { page_no: pg, page_size: 100, create_time_from: agora - 3 * DIA, create_time_to: agora });
     if (!ok(r)) break;
@@ -167,7 +179,7 @@ export async function rodarShopee(modulos = Object.keys(MODULOS_SP), { lojas = O
       rodando.add(key); const c = ctx(loja), t0 = Date.now();
       try { await MODULOS_SP[m](c, { meses, force }); } catch (e) { c.log(`✖ ${m}:`, e.message); c.st.erros++; }
       finally { rodando.delete(key); }
-      if (m === 'avisos' && !c.st.erros) continue; // roda a cada 2 min: só registra quando der erro
+      if (m === 'avisos' && !c.st.erros) continue; // roda a cada minuto: só registra quando der erro
       logColeta({ loja, modulo: m, inicio: t0, fim: Date.now(), chamadas: c.st.chamadas, ok: c.st.ok, erros: c.st.erros, obs: null });
       c.log(`✔ ${m} ${((Date.now() - t0) / 1000).toFixed(1)}s | chamadas ${c.st.chamadas} ok ${c.st.ok} erros ${c.st.erros}`);
     }

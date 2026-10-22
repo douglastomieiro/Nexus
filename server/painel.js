@@ -34,6 +34,9 @@ export const anuncios = cacheDe(300e3, () => {
   return m;
 });
 const thumbDe = (loja, item) => anuncios()[loja + ':' + item]?.thumb || null;
+// miniatura do anúncio da Shopee (dos anúncios coletados)
+export const spThumbs = cacheDe(300e3, () => Object.fromEntries(db.prepare(`SELECT loja, chave, json_extract(body,'$.image.image_url_list[0]') img FROM raw WHERE recurso='sp_item' AND status=200`).all().map(r => [r.loja + ':' + r.chave, r.img])));
+export const spThumb = (loja, item) => spThumbs()[loja + ':' + item] || null;
 export const categorias = cacheDe(600e3, () => Object.fromEntries(db.prepare(`SELECT chave, json_extract(body,'$.name') n FROM raw WHERE recurso='category' AND status=200`).all().map(r => [r.chave, r.n])));
 // anúncios em Ads (status e métricas dos últimos 90 dias), por loja:item
 const adsPorItem = cacheDe(120e3, () => {
@@ -143,24 +146,32 @@ export function registrar(app, { H, nomes, lojasSel, dias }) {
   app.get('/api/sku', H(q => {
     const sku = String(q.sku || ''); if (!sku) throw Object.assign(new Error('informe o SKU'), { status: 400 });
     const lojas = lojasSel(q), w = janela(dias(q)), cur = calcular({ lojas, desde: w.ini }), prev = calcular({ lojas, desde: w.pIni, ate: w.pFim }), env = envios();
-    const linhas = c => c.pedidosTodos.flatMap(p => p.det.filter(d => d.sku === sku).map(d => ({ ...d, pedido: p.id, loja: p.loja, data: p.data, lg: env[p.loja + ':' + p.id]?.lg || null })));
-    const soma = L => { const t = { pedidos: new Set(L.map(x => x.loja + ':' + x.pedido)).size, unidades: 0, receita: 0, devolucao: 0, comissao: 0, frete: 0, imposto: 0, custo: 0, ads: 0, lucro: 0 };
-      for (const x of L) { t.unidades += x.qtd; for (const k of ['receita', 'devolucao', 'comissao', 'frete', 'imposto', 'custo', 'ads', 'lucro']) t[k] += x[k]; }
+    // com Shopee no filtro, o histórico do SKU junta os dois canais
+    const spL = shopeeDoFiltro(lojas), spCur = spL.length ? calcularShopee({ lojas: spL, desde: w.ini }) : null, spPrev = spL.length ? calcularShopee({ lojas: spL, desde: w.pIni, ate: w.pFim }) : null;
+    // frete na nota (cobrado do comprador, base do imposto) é do pedido: cada item fica com a sua parte do valor
+    const linhas = (c, canal) => (c?.pedidosTodos || []).flatMap(p => p.det.filter(d => d.sku === sku).map(d => ({ ...d, canal, pedido: String(p.id), loja: p.loja, data: p.data, flags: p.flags,
+      freteNF: p.receita ? (p.freteNF || 0) * d.receita / p.receita : 0, lg: canal === 'shopee' ? 'Shopee' : env[p.loja + ':' + p.id]?.lg || null })));
+    const soma = L => { const t = { pedidos: new Set(L.map(x => x.loja + ':' + x.pedido)).size, unidades: 0, receita: 0, devolucao: 0, comissao: 0, frete: 0, ajustes: 0, freteNF: 0, imposto: 0, custo: 0, ads: 0, lucro: 0 };
+      for (const x of L) { t.unidades += x.qtd; for (const k of ['receita', 'devolucao', 'comissao', 'frete', 'ajustes', 'freteNF', 'imposto', 'custo', 'ads', 'lucro']) t[k] += x[k] || 0; }
       for (const k of Object.keys(t)) if (k !== 'pedidos' && k !== 'unidades') t[k] = r2(t[k]); t.margem = t.receita ? t.lucro / t.receita : 0; t.precoMedio = t.unidades ? t.receita / t.unidades : 0; return t; };
-    const L = linhas(cur), Lp = linhas(prev), s = cur.skus.find(x => x.sku === sku) || prev.skus.find(x => x.sku === sku);
+    const L = [...linhas(cur, 'ml'), ...linhas(spCur, 'shopee')], Lp = [...linhas(prev, 'ml'), ...linhas(spPrev, 'shopee')];
+    const s = cur.skus.find(x => x.sku === sku) || spCur?.skus.find(x => x.sku === sku) || prev.skus.find(x => x.sku === sku) || spPrev?.skus.find(x => x.sku === sku);
     if (!L.length && !s) throw Object.assign(new Error('SKU sem vendas no período'), { status: 404 });
     const dia = {}, porLoja = {}, porLg = {}, anunc = {};
     for (const x of L) {
       const d = dia[diaBR(x.data)] ||= { dia: diaBR(x.data), receita: 0, unidades: 0, lucro: 0 }; d.receita += x.receita; d.unidades += x.qtd; d.lucro += x.lucro;
       const l = porLoja[x.loja] ||= { loja: x.loja, receita: 0, unidades: 0, lucro: 0 }; l.receita += x.receita; l.unidades += x.qtd; l.lucro += x.lucro;
       const g = porLg[x.lg || 'Sem dado'] ||= { lg: x.lg || 'Sem dado', receita: 0, unidades: 0 }; g.receita += x.receita; g.unidades += x.qtd;
-      const a = anunc[x.loja + ':' + x.item] ||= { loja: x.loja, item: x.item, titulo: x.titulo, thumb: thumbDe(x.loja, x.item), receita: 0, unidades: 0, ads: adsPorItem()[x.loja + ':' + x.item] ? 1 : 0 }; a.receita += x.receita; a.unidades += x.qtd;
+      const a = anunc[x.loja + ':' + x.item] ||= { loja: x.loja, item: x.item, titulo: x.titulo, thumb: x.canal === 'shopee' ? spThumb(x.loja, x.item) : thumbDe(x.loja, x.item), canal: x.canal, receita: 0, unidades: 0, ads: adsPorItem()[x.loja + ':' + x.item] ? 1 : 0 }; a.receita += x.receita; a.unidades += x.qtd;
     }
-    const devol = cur.devolucoes.filter(d => (d.itensDet || []).some(i => i.sku === sku));
-    return { sku, desde: w.ini, titulo: s?.titulo || L[0]?.titulo, thumb: thumbDe((s?.lojas || [L[0]?.loja])[0], s?.item || L[0]?.item), custoUnit: s?.custoUnit ?? null, semCusto: !!s?.semCusto,
+    const devol = [...cur.devolucoes, ...(spCur?.devolucoes.filter(d => d.efetiva) || [])].filter(d => (d.itensDet || []).some(i => i.sku === sku));
+    return { sku, desde: w.ini, titulo: s?.titulo || L[0]?.titulo, thumb: thumbDe((s?.lojas || [L[0]?.loja])[0], s?.item || L[0]?.item) || spThumb(L[0]?.loja, L[0]?.item), custoUnit: s?.custoUnit ?? null, semCusto: !!s?.semCusto,
       total: soma(L), anterior: soma(Lp), devolucoes: devol.length, devolvido: r2(devol.reduce((t, d) => t + d.reembolsado, 0)),
       diario: Object.values(dia).sort((a, b) => a.dia.localeCompare(b.dia)), porLoja: Object.values(porLoja), logistica: Object.values(porLg), anuncios: Object.values(anunc).sort((a, b) => b.receita - a.receita),
-      pedidos: L.sort((a, b) => b.data.localeCompare(a.data)).slice(0, 300).map(x => ({ data: x.data, loja: x.loja, pedido: x.pedido, qtd: x.qtd, preco: x.preco, receita: r2(x.receita), lucro: r2(x.lucro), margem: x.receita ? x.lucro / x.receita : 0, lg: x.lg })) };
+      // datas do ML vêm com -04:00 e as da Shopee em UTC: ordena pelo instante, não pelo texto
+      pedidos: L.sort((a, b) => Date.parse(b.data) - Date.parse(a.data)).slice(0, 300).map(x => ({ data: x.data, canal: x.canal, loja: x.loja, pedido: x.pedido, qtd: x.qtd, preco: x.preco, receita: r2(x.receita),
+        devolucao: r2(x.devolucao), comissao: r2(x.comissao), frete: r2(x.frete), ajustes: r2(x.ajustes || 0), freteNF: r2(x.freteNF), imposto: r2(x.imposto), custo: r2(x.custo), ads: r2(x.ads),
+        lucro: r2(x.lucro), margem: x.receita ? x.lucro / x.receita : 0, lg: x.lg, flags: x.flags })) };
   }));
 
   // ── Dashboard ──

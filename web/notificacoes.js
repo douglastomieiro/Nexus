@@ -1,6 +1,7 @@
 // Sino de atendimento no topo da tela: perguntas, mensagens e reclamações do Mercado Livre e devoluções e chat da Shopee esperando resposta.
 // Consulta o servidor a cada minuto e avisa só do que é novo: cartão no canto da tela, som, número no título da aba
 // e notificação do Windows (quando o navegador permite: endereço https ou localhost). Os já vistos ficam guardados neste navegador.
+// Venda nova também gera aviso (cartão verde e som de caixa), sem entrar no contador do sino; dá para desligar no rodapé do sino.
 (() => {
   const ler = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
   const grava = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
@@ -9,7 +10,9 @@
   const salvaVistos = () => grava('notifVistos', JSON.stringify([...vistos].slice(-800)));
   const avisados = new Set(); // já avisados nesta aba (cartão e som), mesmo sem abrir o sino
   let D = { itens: [], avisos: [] }, painel = null, timer = null;
-  const somLigado = () => ler('notifSom', '1') === '1';
+  const somLigado = () => ler('notifSom', '1') === '1', vendasLigado = () => ler('notifVendas', '1') === '1';
+  let vVistas = null; try { const v = JSON.parse(ler('notifVendasVistas', 'null')); if (Array.isArray(v)) vVistas = new Set(v); } catch {}
+  const brl = n => (n ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   const SVG = p => `<svg viewBox="0 0 24 24">${p}</svg>`;
   const ICO = {
@@ -19,9 +22,10 @@
     chat: SVG('<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/>'),
     reclamacao: SVG('<path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3"/><path d="M12 9v4M12 17h.01"/>'),
     devolucao: SVG('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
+    venda: SVG('<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>'),
   };
-  const NOME = { pergunta: 'Pergunta', mensagem: 'Mensagem', reclamacao: 'Reclamação', devolucao: 'Devolução', chat: 'Chat' };
-  const COR = { pergunta: '#2563eb', mensagem: '#0d9488', reclamacao: '#dc2626', devolucao: '#ea580c', chat: '#ee4d2d' };
+  const NOME = { pergunta: 'Pergunta', mensagem: 'Mensagem', reclamacao: 'Reclamação', devolucao: 'Devolução', chat: 'Chat', venda: 'Venda' };
+  const COR = { pergunta: '#2563eb', mensagem: '#0d9488', reclamacao: '#dc2626', devolucao: '#ea580c', chat: '#ee4d2d', venda: '#16a34a' };
   const quando = d => { const m = d ? Math.round((Date.now() - new Date(d)) / 60e3) : null; return m == null || isNaN(m) ? '' : m < 1 ? 'agora' : m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.round(m / 60)} h` : `há ${Math.round(m / 1440)} dia(s)`; };
   const canal = i => `${i.canal === 'shopee' ? 'Shopee' : 'Mercado Livre'} · ${esc((i.nomeLoja || i.loja).replace(' (Shopee)', ''))}`;
 
@@ -57,10 +61,10 @@ a.ni:hover{background:var(--row)}
   // som: o navegador só libera áudio depois do primeiro clique na página
   let ac = null;
   addEventListener('pointerdown', () => { try { ac ||= new AudioContext(); ac.resume(); } catch {} }, { passive: true });
-  const toca = () => {
+  const toca = (notas = [[880, 0], [1320, 0.13]]) => {
     if (!somLigado() || !ac || ac.state !== 'running') return;
     const t = ac.currentTime;
-    for (const [f, d] of [[880, 0], [1320, 0.13]]) {
+    for (const [f, d] of notas) {
       const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.value = f;
       g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(0.18, t + d + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.4);
       o.connect(g).connect(ac.destination); o.start(t + d); o.stop(t + d + 0.45);
@@ -79,7 +83,7 @@ a.ni:hover{background:var(--row)}
     painel.innerHTML = `<header><b>Atendimento · ${D.itens.length} esperando resposta</b><a class="lk" href="#atendimento">abrir Atendimento</a></header>
       ${D.avisos.map(a => `<div class="na">${esc(a)}</div>`).join('')}
       <div class="nl">${D.itens.length ? D.itens.map(i => linha(i, novos.has(i.id))).join('') : '<div class="nv">Nada esperando resposta agora.</div>'}</div>
-      <footer><button data-a="som">Som: ${somLigado() ? 'ligado' : 'desligado'}</button>${winTxt()}<span style="margin-left:auto">atualiza a cada minuto</span></footer>`;
+      <footer><button data-a="som">Som: ${somLigado() ? 'ligado' : 'desligado'}</button><button data-a="vendas">Aviso de venda: ${vendasLigado() ? 'ligado' : 'desligado'}</button>${winTxt()}<span style="margin-left:auto">atualiza a cada 30 s</span></footer>`;
   }
   function abre() {
     const b = document.getElementById('nsino'); if (!b) return;
@@ -91,6 +95,7 @@ a.ni:hover{background:var(--row)}
     desenhaPainel(novos);
     painel.onclick = async e => {
       const a = e.target.closest('[data-a]'); if (a?.dataset.a === 'som') { grava('notifSom', somLigado() ? '0' : '1'); desenhaPainel(novos); }
+      if (a?.dataset.a === 'vendas') { grava('notifVendas', vendasLigado() ? '0' : '1'); desenhaPainel(novos); }
       if (a?.dataset.a === 'win') { try { await Notification.requestPermission(); } catch {} desenhaPainel(novos); }
       if (e.target.closest('a[href="#atendimento"]')) fecha();
     };
@@ -129,8 +134,27 @@ a.ni:hover{background:var(--row)}
     }
   }
 
+  // venda nova: cartão verde (clique abre a ficha do pedido), som de caixa e notificação do Windows
+  function avisaVenda(lista) {
+    let box = document.getElementById('ntoast'); if (!box) { box = document.createElement('div'); box.id = 'ntoast'; document.body.appendChild(box); }
+    for (const v of lista.slice(0, 3)) {
+      box.insertAdjacentHTML('beforeend', linha({ tipo: 'venda', canal: v.canal, loja: v.loja, nomeLoja: v.nomeLoja, data: v.data, titulo: `Nova venda · ${brl(v.valor)}`, texto: `${v.qtd}× ${v.titulo}${v.outros ? ` + ${v.outros} item(ns)` : ''}` }, false, 'div'));
+      const el = box.lastElementChild; el.onclick = () => { el.remove(); window.abreFicha ? window.abreFicha(v.loja, v.pedido) : (location.hash = 'aovivo'); };
+      setTimeout(() => el.remove(), 15000);
+    }
+    if (lista.length > 3) { box.insertAdjacentHTML('beforeend', `<div class="ni" style="--c:#16a34a"><div><b>+ ${lista.length - 3} venda(s)</b><p>Veja todas em Análise de Pedidos › Ao vivo.</p></div></div>`); const el = box.lastElementChild; el.onclick = () => { el.remove(); location.hash = 'aovivo'; }; setTimeout(() => el.remove(), 15000); }
+    toca([[523, 0], [659, 0.1], [784, 0.2], [1047, 0.32]]);
+    if ('Notification' in window && window.isSecureContext && Notification.permission === 'granted') {
+      try {
+        const v = lista[0], tot = lista.reduce((t, x) => t + (x.valor || 0), 0);
+        const n = new Notification(lista.length > 1 ? `${lista.length} vendas novas · ${brl(tot)}` : `Nova venda · ${brl(v.valor)}`, { body: lista.slice(0, 4).map(x => `${x.qtd}× ${x.titulo} (${(x.nomeLoja || '').replace(' (Shopee)', ' · Shopee')})`).join('\n'), tag: 'venda', icon: 'logo.svg' });
+        n.onclick = () => { focus(); n.close(); location.hash = 'aovivo'; };
+      } catch {}
+    }
+  }
+
   async function busca() {
-    clearTimeout(timer); timer = setTimeout(busca, 60e3);
+    clearTimeout(timer); timer = setTimeout(busca, 30e3);
     const r = await fetch('api/notificacoes', { cache: 'no-store' }).catch(() => null);
     const b = document.getElementById('nsino');
     if (!r || !r.ok) { if (r?.status === 404 && b) { b.style.display = 'none'; clearTimeout(timer); timer = setTimeout(busca, 5 * 60e3); } return; } // servidor antigo: some até ser reiniciado
@@ -140,6 +164,11 @@ a.ni:hover{background:var(--row)}
     novos.forEach(i => avisados.add(i.id));
     marca();
     if (novos.length) avisa(novos);
+    // vendas: a primeira consulta neste navegador só registra as de hoje, sem aviso
+    const vs = D.vendas || [];
+    if (!vVistas) vVistas = new Set(vs.map(v => v.id));
+    const novasV = vs.filter(v => !vVistas.has(v.id)); novasV.forEach(v => vVistas.add(v.id)); grava('notifVendasVistas', JSON.stringify([...vVistas].slice(-400)));
+    if (novasV.length && vendasLigado()) avisaVenda(novasV);
     if (painel) desenhaPainel(new Set());
   }
 
