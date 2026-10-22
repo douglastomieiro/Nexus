@@ -38,6 +38,26 @@ export async function acaoML(loja, tipo, alvo, metodo, caminho, corpo) {
   return resposta;
 }
 
+// Chamada direta com o token de escrita e cabeçalhos próprios (o estoque por depósito pede x-version). Devolve { status, data, headers }.
+async function chamaML(loja, metodo, caminho, { corpo, headers = {} } = {}) {
+  const res = await fetch(API + caminho, { method: metodo, signal: AbortSignal.timeout(30000), body: corpo !== undefined ? JSON.stringify(corpo) : undefined,
+    headers: { Authorization: `Bearer ${await tokenDe(vendedorDe(loja))}`, ...(corpo !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers } });
+  const tx = await res.text(); let data; try { data = JSON.parse(tx); } catch { data = tx ? { message: tx } : null; }
+  return { status: res.status, data, headers: res.headers };
+}
+// leitura com o token de escrita (dados que precisam vir com a versão atual, como o estoque); no modo de teste não lê nada
+export const leML = (loja, caminho) => SIMULADO ? Promise.resolve(null) : chamaML(loja, 'GET', caminho).catch(() => null);
+// como acaoML, mas com cabeçalhos
+export async function acaoMLCom(loja, tipo, alvo, metodo, caminho, corpo, headers) {
+  const pedido = { metodo, caminho, corpo };
+  if (SIMULADO) { const r = { simulado: true }; registra(loja, tipo, alvo, pedido, 200, true, r); return r; }
+  let status = 0, resposta = null, ok = false;
+  try { const r = await chamaML(loja, metodo, caminho, { corpo, headers }); status = r.status; resposta = r.data; ok = r.status >= 200 && r.status < 300; } catch (e) { resposta = { message: e.message }; }
+  registra(loja, tipo, alvo, pedido, status, ok, resposta);
+  if (!ok) throw Object.assign(erro(status ? traduz(status, resposta) : `Não foi possível falar com o Mercado Livre: ${resposta.message}`, 502), { ml: resposta });
+  return resposta;
+}
+
 // Anexos (multipart): os arquivos chegam da tela em base64 e vão juntos no mesmo pedido, no campo `campo`. Devolve a resposta do ML (id/nome do anexo).
 export async function enviaArquivos(loja, tipo, alvo, caminho, arquivos, campo = 'file') {
   const id = vendedorDe(loja), pedido = { metodo: 'POST', caminho, arquivo: arquivos.map(a => a.nome).join(', '), bytes: arquivos.reduce((t, a) => t + Math.round((a.base64 || '').length * 0.75), 0) };
