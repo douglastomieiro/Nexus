@@ -187,6 +187,7 @@
   }
   function desenhaPerfis(P, dono) {
     const el = $('#pzpf'); if (P.perfis.possivel === false) { el.innerHTML = '<p class="dica" style="margin:0">Perfis com senha só no sistema instalado (aqui cada navegador já é de uma pessoa).</p>'; return; }
+    if (P.semLogin) { el.innerHTML = '<p class="dica" style="margin:0">Login desligado neste servidor (SEM_LOGIN): o sistema abre direto e o acesso é controlado pela rede. Os perfis gravados ficam guardados.</p>'; return; }
     if (!dono) { el.innerHTML = `<p class="dica" style="margin:0">Você entrou como <b>${esc(P.perfis.eu?.nome || '')}</b>.</p>`; return; }
     let lista = P.perfis.lista.map(p => ({ ...p, senha: '' })), ativo = P.perfis.ativo;
     const desenha = () => {
