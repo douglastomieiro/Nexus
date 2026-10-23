@@ -1,0 +1,2 @@
+# ganchos do git rodam no sh: sempre com fim de linha LF
+.githooks/* text eol=lf
