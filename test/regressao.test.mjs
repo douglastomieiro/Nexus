@@ -247,6 +247,9 @@ try {
   ok((await api('/api/vendas/conversa', { corpo: { loja: 'loja1', pedido: P.o2, opcao: 'INVENTADO' } })).status === 400, 'motivo de conversa inválido é recusado');
   const ficha = await get(`/api/pedido?loja=loja1&id=${P.o1}`);
   ok(ficha && !ficha.erro, 'ficha da venda abre', ficha);
+  // ao vivo: hoje o3 (lucro 51 de 200) e o8 (17,40 de 70) com custo; o2 sem custo fica fora da margem
+  const av = await get('/api/aovivo');
+  ok(perto(av.kpi?.hoje.margem * 100, 25.33) && av.kpi.hoje.semCusto === 1 && av.kpi.hoje.pedidos === 3, 'ao vivo: margem média de hoje (68,40 ÷ 270) sem a venda sem custo', av.kpi?.hoje);
 
   parte('Anúncios');
   const an = await get('/api/anuncios/lista'), a1 = an.itens.find(x => x.id === 'MLB1001');

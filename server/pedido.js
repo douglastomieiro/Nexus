@@ -123,9 +123,11 @@ export function aoVivo(lojas) {
   const ml = calcular({ lojas, desde: on, ate: hj }), sp = spL.length ? calcularShopee({ lojas: spL, desde: on, ate: hj }) : null;
   const env = envios(), an = anuncios();
   const pos = d => { const x = new Date(Date.parse(d) - 3 * 3600e3); return { dia: x.toISOString().slice(0, 10), min: x.getUTCHours() * 60 + x.getUTCMinutes() }; };
-  const vazio = () => ({ pedidos: 0, unidades: 0, receita: 0, lucro: 0, ads: 0 });
+  // margem média = resultado ÷ faturamento das vendas com custo cadastrado (sem custo, a margem sairia inflada)
+  const vazio = () => ({ pedidos: 0, unidades: 0, receita: 0, lucro: 0, ads: 0, semCusto: 0, rcc: 0, lcc: 0 });
   const K = { hoje: vazio(), ontemAteAgora: vazio(), ontem: vazio() }, horas = { hoje: Array(24).fill(0), ontem: Array(24).fill(0), hojeN: Array(24).fill(0), ontemN: Array(24).fill(0) };
-  const soma = (k, p) => { k.pedidos++; k.unidades += p.qtd || p.det.reduce((t, d) => t + d.qtd, 0); k.receita += p.receita; k.lucro += p.lucro; k.ads += p.ads; };
+  const soma = (k, p) => { k.pedidos++; k.unidades += p.qtd || p.det.reduce((t, d) => t + d.qtd, 0); k.receita += p.receita; k.lucro += p.lucro; k.ads += p.ads;
+    if ((p.flags || []).includes('sem custo')) k.semCusto++; else { k.rcc += p.receita; k.lcc += p.lucro; } };
   const feed = [];
   for (const [canal, lista] of [['ml', ml.pedidosTodos], ['shopee', sp?.pedidosTodos || []]]) for (const p of lista) {
     const { dia, min } = pos(p.data), h = Math.floor(min / 60);
@@ -137,7 +139,7 @@ export function aoVivo(lojas) {
         ads: r2(p.ads), frete: r2(p.frete), lg: canal === 'ml' ? env[p.loja + ':' + p.id]?.lg || null : 'Shopee', uf: canal === 'ml' ? env[p.loja + ':' + p.id]?.uf || null : null, flags: p.flags });
     } else if (dia === on) { soma(K.ontem, p); horas.ontem[h] += p.receita; horas.ontemN[h]++; if (min <= minAgora) soma(K.ontemAteAgora, p); }
   }
-  for (const k of Object.values(K)) for (const c of ['receita', 'lucro', 'ads']) k[c] = r2(k[c]);
+  for (const k of Object.values(K)) { k.margem = k.rcc ? k.lcc / k.rcc : null; delete k.rcc; delete k.lcc; for (const c of ['receita', 'lucro', 'ads']) k[c] = r2(k[c]); }
   for (const k of ['hoje', 'ontem']) horas[k] = horas[k].map(r2);
   // cancelados hoje e hora da última coleta de pedidos (das contas do filtro)
   const ph = a => a.map(() => '?').join(',') || "''";

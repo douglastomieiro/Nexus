@@ -98,6 +98,8 @@
   NOTA.aovivo = 'Período fixo: hoje · atualiza sozinho a cada 30 s';
   let timer = null, vistos = new Set(), graf = null;
   const varia = (a, b) => b ? `${a >= b ? '▲' : '▼'} ${pc(Math.abs(a / b - 1), 0)} vs ontem até agora` : 'ontem até agora: 0';
+  // margem: diferença em pontos percentuais; avisa quantas vendas ficaram fora por não ter custo
+  const variaMg = (a, b, sem) => `${a == null || b == null ? `ontem até agora: ${b == null ? '—' : pc(b, 1)}` : `${a >= b ? '▲' : '▼'} ${String(Math.abs((a - b) * 100).toFixed(1)).replace('.', ',')} p.p. vs ontem até agora`}${sem ? ` · ${num(sem)} sem custo fora da conta` : ''}`;
 
   VIEWS.aovivo = async function () {
     clearInterval(timer); vistos = new Set(); graf = null;
@@ -120,7 +122,8 @@
     const H = D.kpi.hoje, O = D.kpi.ontemAteAgora, proj = O.receita ? H.receita * D.kpi.ontem.receita / O.receita : null;
     $('#avu').textContent = `atualizado às ${hora(D.agora)}${D.ultimaColeta ? ` · última coleta de pedidos às ${hora(D.ultimaColeta)}` : ''}`;
     $('#avk').innerHTML = kpi('Faturamento hoje', brl(H.receita), varia(H.receita, O.receita), 'lucro', 'blue') + kpi('Pedidos hoje', num(H.pedidos), varia(H.pedidos, O.pedidos), 'pedidos', 'purple')
-      + kpi('Resultado estimado', brl(H.lucro), varia(H.lucro, O.lucro), 'abc', H.lucro < 0 ? 'red' : 'green') + kpi('Ticket médio', brl(H.pedidos ? H.receita / H.pedidos : 0), `${num(H.unidades)} unidade(s)`, 'itens', 'amber')
+      + kpi('Resultado estimado', brl(H.lucro), varia(H.lucro, O.lucro), 'abc', H.lucro < 0 ? 'red' : 'green')
+      + kpi('Margem média hoje', H.margem == null ? '—' : pc(H.margem, 1), variaMg(H.margem, O.margem, H.semCusto), 'abc', H.margem == null ? 'slate' : H.margem < 0 ? 'red' : H.margem * 100 < (window.REGRAS?.margemMin ?? 15) ? 'amber' : 'green') + kpi('Ticket médio', brl(H.pedidos ? H.receita / H.pedidos : 0), `${num(H.unidades)} unidade(s)`, 'itens', 'amber')
       + kpi('No ritmo de ontem', proj == null ? '—' : brl(proj), `ontem fechou em ${brl(D.kpi.ontem.receita)}`, 'rocket', 'teal') + kpi('Cancelados hoje', num(D.cancelados), 'não entram no faturamento', 'cancel', D.cancelados ? 'red' : 'slate');
     $('#avn').innerHTML = D.adsHoje || !H.pedidos ? '' : '<div class="note">O gasto de Ads de hoje ainda não foi coletado (a coleta de Ads é de 3 em 3 horas): o resultado aparece sem Ads e se ajusta sozinho depois.</div>';
     // acumulado: hoje até a hora atual, ontem o dia todo
