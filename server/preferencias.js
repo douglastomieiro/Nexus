@@ -83,7 +83,7 @@ async function salvaPerfis(b, req) {
     const nome = String(x.nome || '').trim().slice(0, 40); if (!nome) throw erro('Todo perfil precisa de nome.');
     const ant = atual.lista.find(p => p.id === x.id), id = ant?.id || aleatorio(6);
     const p = { id, nome, dono: !!x.dono, acoes: !!x.acoes, modulos: x.dono ? null : (x.modulos || []).filter(m => MODULOS.some(d => d.id === m)), sal: ant?.sal, hash: ant?.hash };
-    if (x.senha) { if (String(x.senha).length < 4) throw erro(`A senha de ${nome} precisa de pelo menos 4 caracteres.`); p.sal = aleatorio(16); p.hash = await hash(String(x.senha), p.sal); }
+    if (x.senha) { if (String(x.senha).length < 8) throw erro(`A senha de ${nome} precisa de pelo menos 8 caracteres.`); p.sal = aleatorio(16); p.hash = await hash(String(x.senha), p.sal); }
     if (!p.hash) throw erro(`Defina a senha de ${nome}.`);
     lista.push(p);
   }
@@ -96,22 +96,40 @@ async function salvaPerfis(b, req) {
   if (ativo && !atual.ativo && !perfilDe(req)) return { novaSessao: lista.find(p => p.dono).id };
   return {};
 }
-const novaSessao = (res, perfil) => { const t = aleatorio(24); db.prepare('INSERT INTO sessoes (token, perfil, criado) VALUES (?,?,?)').run(t, perfil, Date.now());
-  res.setHeader('Set-Cookie', `central_sessao=${t}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 86400}`); };
+// aberto pela internet (túnel/proxy com https), o cookie só viaja cifrado
+const https = req => req.secure || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
+const novaSessao = (req, res, perfil) => { const t = aleatorio(24); db.prepare('INSERT INTO sessoes (token, perfil, criado) VALUES (?,?,?)').run(t, perfil, Date.now());
+  res.setHeader('Set-Cookie', `central_sessao=${t}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 86400}${https(req) ? '; Secure' : ''}`); };
+
+// trava de tentativas: 8 senhas erradas em 15 min do mesmo endereço → bloqueia esse endereço até a janela passar.
+// Atrás de túnel/proxy no próprio PC (cloudflared, Tailscale Funnel) o endereço real vem no cabeçalho; de fora, só vale o da conexão.
+const ERROS = new Map(), JANELA = 15 * 60e3, MAX_ERROS = 8;
+function origem(req) {
+  const ip = String(req.socket?.remoteAddress || '').replace(/^::ffff:/, '');
+  const fwd = String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return (ip === '127.0.0.1' || ip === '::1') && fwd ? fwd : ip;
+}
+const tentativas = k => { const agora = Date.now(), l = (ERROS.get(k) || []).filter(t => agora - t < JANELA); l.length ? ERROS.set(k, l) : ERROS.delete(k); return l; };
 
 export function registrarPreferencias(app) {
   const J = fn => async (req, res) => { try { res.json(await fn(req, res)); } catch (e) { if (!e.status) console.error(e); res.status(e.status || 500).json({ erro: e.message }); } };
   app.get('/api/prefs', J(req => { const P = perfis(), eu = P.ativo && !semLogin() ? perfilDe(req) : null;
     return { modulos: modulos(), defs: MODULOS.filter(m => !m.so || m.so()).map(({ id, nome, txt }) => ({ id, nome, txt })), regras: regras(),
-      perfis: { ativo: P.ativo && !semLogin(), precisaLogin: P.ativo && !semLogin() && !eu, eu: publico(eu), opcoes: P.ativo ? P.lista.map(p => ({ id: p.id, nome: p.nome })) : [],
+      perfis: { ativo: P.ativo && !semLogin(), precisaLogin: P.ativo && !semLogin() && !eu, eu: publico(eu),
         lista: (!P.ativo || semLogin() || eu?.dono) ? P.lista.map(p => ({ ...publico(p), temSenha: !!p.hash })) : [], possivel: !NO_NAVEGADOR }, semLogin: semLogin() }; }));
   app.post('/api/prefs/modulos', J(req => { soDono(req); const b = req.body || {}; grava('central_modulos', Object.fromEntries(MODULOS.map(m => [m.id, b[m.id] !== false]))); return modulos(); }));
   app.post('/api/prefs/regras', J(req => { soDono(req); return salvaRegras(req.body || {}); }));
-  app.post('/api/prefs/perfis', J(async (req, res) => { soDono(req); const r = await salvaPerfis(req.body || {}, req); if (r.novaSessao) novaSessao(res, r.novaSessao); return { ok: true }; }));
+  app.post('/api/prefs/perfis', J(async (req, res) => { soDono(req); const r = await salvaPerfis(req.body || {}, req); if (r.novaSessao) novaSessao(req, res, r.novaSessao); return { ok: true }; }));
+  // usuário = nome do perfil (sem diferença de maiúsculas); "perfil" (id) continua aceito
   app.post('/api/login', J(async (req, res) => {
-    const p = perfis().lista.find(x => x.id === String(req.body?.perfil || '')); await new Promise(r => setTimeout(r, 400)); // freia tentativa em sequência
-    if (!p || !p.hash || await hash(String(req.body?.senha || ''), p.sal) !== p.hash) throw erro('Perfil ou senha não conferem.', 401);
-    novaSessao(res, p.id); return { ok: true, perfil: publico(p) };
+    // a tentativa conta antes de conferir a senha (várias ao mesmo tempo não passam da trava); senha certa zera
+    const k = origem(req), l = tentativas(k);
+    if (l.length >= MAX_ERROS) throw erro('Muitas tentativas erradas. Espere 15 minutos e tente de novo.', 429);
+    ERROS.set(k, [...l, Date.now()]); await new Promise(r => setTimeout(r, 400)); // freia tentativa em sequência
+    const u = String(req.body?.usuario ?? '').trim().toLowerCase(), id = String(req.body?.perfil || '');
+    const p = perfis().lista.find(x => (u ? x.nome.toLowerCase() === u : x.id === id));
+    if (!p || !p.hash || await hash(String(req.body?.senha || ''), p.sal) !== p.hash) throw erro('Usuário ou senha não conferem.', 401);
+    ERROS.delete(k); novaSessao(req, res, p.id); return { ok: true, perfil: publico(p) };
   }));
   app.post('/api/logout', J((req, res) => { const t = cookie(req); if (t) db.prepare('DELETE FROM sessoes WHERE token=?').run(t); res.setHeader('Set-Cookie', 'central_sessao=; Path=/; Max-Age=0'); return { ok: true }; }));
 }

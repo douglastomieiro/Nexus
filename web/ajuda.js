@@ -132,7 +132,7 @@
       a: ['Informar a alíquota de cada conta.', 'Baixar e restaurar o backup dos custos.'] },
     personalizar: { o: 'Deixar o sistema do seu jeito: o que aparece, o que é importante e quem pode fazer o quê.',
       a: ['Ligar e desligar módulos (some do menu, do Resumo, do sino e da coleta).', 'Definir Minhas regras: margem mínima, cobertura, ACOS máximo, qualidade, prazo de resposta e limites de reputação.',
-        'Escolher os blocos do Resumo, os avisos do sino, o menu (favoritos e abas escondidas), colunas e filtros.', 'Criar perfis com senha (dono, atendimento, expedição…).'],
+        'Escolher os blocos do Resumo, os avisos do sino, o menu (favoritos e abas escondidas), colunas e filtros.', 'Criar usuários com senha (dono, atendimento, expedição…): com eles ligados, o sistema pede usuário e senha e pode ser aberto de fora da loja.'],
       d: 'Se a senha do dono for esquecida, iniciar o servidor com SEM_LOGIN=1 abre sem pedir senha.' },
     acoes: { o: 'Tudo o que o sistema fez no Mercado Livre por você: quando, em que conta, o que foi pedido e o que o ML respondeu.', a: ['Filtrar por tipo e ver a resposta completa de cada ação.'] },
     manual: { o: 'Todas as explicações do sistema num lugar só, na ordem do menu.', a: ['Buscar uma palavra (ex.: ACOS, etiqueta, custo).', 'Abrir a tela de cada explicação.'] },

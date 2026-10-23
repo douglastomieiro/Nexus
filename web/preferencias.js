@@ -73,15 +73,15 @@
     ph.insertBefore(b, ph.firstChild?.nextSibling || null);
   }
   function entrar() {
-    if ($('#pzlog')) return; const P = window.PREFS?.perfis;
+    if ($('#pzlog')) return;
     const d = document.createElement('div'); d.id = 'pzlog';
-    d.innerHTML = `<form class="cx"><h3>Entrar</h3><p>Escolha o seu perfil e digite a senha.</p>
-      <label>Perfil<select id="pzp">${(P?.opcoes || []).map(o => `<option value="${esc(o.id)}">${esc(o.nome)}</option>`).join('')}</select></label>
+    d.innerHTML = `<form class="cx"><h3>Entrar</h3><p>Digite o seu usuário e a senha.</p>
+      <label>Usuário<input id="pzp" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
       <label>Senha<input id="pzs" type="password" autocomplete="current-password"></label><button type="submit">Entrar</button><small id="pze" class="bad" style="display:block;margin-top:8px"></small></form>`;
-    document.body.appendChild(d); const ult = L.ler('perfil:ultimo', null); if (ult && P?.opcoes.some(o => o.id === ult)) $('#pzp').value = ult; $('#pzs').focus();
+    document.body.appendChild(d); const ult = L.ler('perfil:usuario', ''); $('#pzp').value = ult; (ult ? $('#pzs') : $('#pzp')).focus();
     d.querySelector('form').onsubmit = async e => { e.preventDefault(); $('#pze').textContent = '';
-      const r = await fetch('api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ perfil: $('#pzp').value, senha: $('#pzs').value }) }).catch(() => null);
-      if (r?.ok) { L.grava('perfil:ultimo', $('#pzp').value); location.reload(); } else $('#pze').textContent = (await r?.json().catch(() => null))?.erro || 'Não foi possível entrar.'; };
+      const r = await fetch('api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ usuario: $('#pzp').value, senha: $('#pzs').value }) }).catch(() => null);
+      if (r?.ok) { L.grava('perfil:usuario', $('#pzp').value.trim()); location.reload(); } else $('#pze').textContent = (await r?.json().catch(() => null))?.erro || 'Não foi possível entrar.'; };
   }
   // qualquer resposta "entre com o seu perfil" (sessão vencida) abre a tela de entrada
   const f0 = window.fetch.bind(window);
@@ -190,8 +190,8 @@
     if (!dono) { el.innerHTML = `<p class="dica" style="margin:0">Você entrou como <b>${esc(P.perfis.eu?.nome || '')}</b>.</p>`; return; }
     let lista = P.perfis.lista.map(p => ({ ...p, senha: '' })), ativo = P.perfis.ativo;
     const desenha = () => {
-      el.innerHTML = `<label class="pz-m" style="max-width:520px;margin-bottom:10px"><input type="checkbox" id="pzat"${ativo ? ' checked' : ''}><span><b>Pedir perfil e senha para entrar</b><small>desligado, o sistema abre direto como sempre. Esqueceu a senha do dono: inicie o servidor com SEM_LOGIN=1.</small></span></label>
-        <table class="pz-l"><tr><th>Nome</th><th>Dono</th><th>Pode agir no ML</th><th>Módulos</th><th>Senha</th><th></th></tr>${lista.map((p, i) => `<tr data-i="${i}"><td><input data-pf="nome" value="${esc(p.nome)}" style="width:130px"></td>
+      el.innerHTML = `<label class="pz-m" style="max-width:520px;margin-bottom:10px"><input type="checkbox" id="pzat"${ativo ? ' checked' : ''}><span><b>Pedir usuário e senha para entrar</b><small>o usuário é o nome do perfil; senha com pelo menos 8 caracteres. Desligado, o sistema abre direto como sempre. Esqueceu a senha do dono: inicie o servidor com SEM_LOGIN=1.</small></span></label>
+        <table class="pz-l"><tr><th>Usuário</th><th>Dono</th><th>Pode agir no ML</th><th>Módulos</th><th>Senha</th><th></th></tr>${lista.map((p, i) => `<tr data-i="${i}"><td><input data-pf="nome" value="${esc(p.nome)}" style="width:130px"></td>
           <td><input type="checkbox" data-pf="dono"${p.dono ? ' checked' : ''}></td><td><input type="checkbox" data-pf="acoes"${p.dono || p.acoes ? ' checked' : ''}${p.dono ? ' disabled' : ''}></td>
           <td>${p.dono ? '<small style="color:var(--mut)">todos, e muda as configurações</small>' : P.defs.map(m => `<label style="display:inline-flex;gap:3px;margin-right:8px;font-size:12px"><input type="checkbox" data-pm="${m.id}"${!p.modulos || p.modulos.includes(m.id) ? ' checked' : ''}>${esc(m.nome)}</label>`).join('')}</td>
           <td><input data-pf="senha" type="password" autocomplete="new-password" placeholder="${p.temSenha ? 'manter a atual' : 'definir senha'}" style="width:130px"></td><td><button class="mini" data-rm="${i}">tirar</button></td></tr>`).join('')}</table>
@@ -206,7 +206,7 @@
         [['Atendimento', ['atendimento']], ['Expedição', ['vendas']], ['Financeiro', ['financas', 'promocoes']]].forEach(([n, m]) => { if (!tem(n)) lista.push({ nome: n, dono: false, acoes: n !== 'Financeiro', modulos: m, senha: '' }); });
         desenha(); avisoAcao('Modelos incluídos: defina as senhas e salve.'); };
       $('#pzps').onclick = async () => { le();
-        if (ativo && !await confirmaAcao({ titulo: 'Perfis de uso', texto: 'A partir de agora o sistema pede perfil e senha. Você continua dentro como dono.', perigo: 'Guarde a senha do dono: sem ela, só reiniciando o servidor com SEM_LOGIN=1.', marcar: 'Anotei a senha do dono', botao: 'Salvar perfis' })) return;
+        if (ativo && !await confirmaAcao({ titulo: 'Perfis de uso', texto: 'A partir de agora o sistema pede usuário e senha. Você continua dentro como dono.', perigo: 'Guarde a senha do dono: sem ela, só reiniciando o servidor com SEM_LOGIN=1.', marcar: 'Anotei a senha do dono', botao: 'Salvar perfis' })) return;
         try { await postAcao('api/prefs/perfis', { ativo, lista }); avisoAcao('Perfis salvos.'); setTimeout(() => location.reload(), 700); } catch (e) { avisoAcao(e.message, true); } };
     };
     desenha();

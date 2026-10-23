@@ -357,15 +357,19 @@ try {
   ok(Object.values((await get('/api/prefs')).modulos).every(Boolean), 'religa todos os módulos');
 
   parte('Perfis');
-  r = await api('/api/prefs/perfis', { corpo: { ativo: true, lista: [{ nome: 'Dono', dono: true, senha: 'dono1234' }, { nome: 'Atendente', modulos: ['atendimento'], acoes: true, senha: 'at1234' }] } });
+  r = await api('/api/prefs/perfis', { corpo: { ativo: true, lista: [{ nome: 'Dono', dono: true, senha: 'dono1234' }, { nome: 'Atendente', modulos: ['atendimento'], acoes: true, senha: 'atende1234' }] } });
   const dono = r.cookie;
   ok(r.status === 200 && dono.startsWith('central_sessao='), 'liga os perfis e quem ligou já entra como dono', r.j);
   ok((await api('/api/vendas/lista')).status === 401, 'sem entrar, a API pede login');
-  const pf = await get('/api/prefs'), idAt = pf.perfis.opcoes.find(p => p.nome === 'Atendente')?.id;
-  ok(pf.perfis.precisaLogin && pf.perfis.lista.length === 0, 'tela de login lista os perfis sem expor detalhes');
-  ok((await api('/api/login', { corpo: { perfil: idAt, senha: 'errada' } })).status === 401, 'senha errada é recusada');
-  r = await api('/api/login', { corpo: { perfil: idAt, senha: 'at1234' } }); const at = r.cookie;
-  ok(r.status === 200 && at, 'entra como Atendente');
+  const pf = await get('/api/prefs');
+  ok(pf.perfis.precisaLogin && pf.perfis.lista.length === 0 && !pf.perfis.opcoes, 'tela de login não mostra os usuários nem detalhes dos perfis');
+  ok((await api('/api/prefs/perfis', { cookie: dono, corpo: { ativo: true, lista: [{ nome: 'Dono', dono: true, senha: 'curta' }] } })).status === 400, 'senha com menos de 8 caracteres é recusada');
+  ok((await api('/api/login', { corpo: { usuario: 'Atendente', senha: 'errada' } })).status === 401, 'senha errada é recusada');
+  ok((await api('/api/login', { corpo: { usuario: 'ninguem', senha: 'atende1234' } })).status === 401, 'usuário que não existe é recusado');
+  r = await api('/api/login', { corpo: { usuario: ' atendente ', senha: 'atende1234' } }); const at = r.cookie;
+  ok(r.status === 200 && at, 'entra com usuário e senha (sem diferença de maiúsculas)');
+  const cookieLogin = https => fetch(S.A + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json', ...(https ? { 'x-forwarded-proto': 'https' } : {}) }, body: JSON.stringify({ usuario: 'Atendente', senha: 'atende1234' }) }).then(x => x.headers.get('set-cookie') || '');
+  ok(!/Secure/i.test(await cookieLogin(false)) && /;\s*Secure/i.test(await cookieLogin(true)), 'cookie Secure só atrás de https (túnel)');
   ok((await api('/api/at/perguntas', { cookie: at })).status === 200, 'Atendente vê o atendimento');
   ok((await api('/api/at/perguntas/responder', { cookie: at, corpo: { loja: 'loja1', id: '6002', texto: 'Serve sim.' } })).status === 200, 'Atendente responde pergunta');
   ok((await api('/api/vendas/lista', { cookie: at })).status === 403, 'Atendente não vê Vendas');
@@ -377,6 +381,10 @@ try {
   ok(lista.length === 2 && lista.every(p => p.temSenha), 'dono vê os perfis');
   ok((await api('/api/prefs/perfis', { cookie: dono, corpo: { ativo: false, lista: lista.map(p => ({ id: p.id, nome: p.nome, dono: p.dono, modulos: p.modulos, acoes: p.acoes })) } })).status === 200, 'dono desliga os perfis');
   ok((await api('/api/vendas/lista')).status === 200, 'sem perfis, abre direto');
+  const tenta = ip => fetch(S.A + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip }, body: JSON.stringify({ usuario: 'Dono', senha: 'errada' }) }).then(x => x.status);
+  const st = await Promise.all(Array.from({ length: 9 }, () => tenta('203.0.113.9')));
+  ok(st.filter(x => x === 401).length === 8 && st.includes(429), 'trava depois de 8 senhas erradas do mesmo endereço', st);
+  ok(await tenta('203.0.113.10') === 401, 'a trava não bloqueia outro endereço');
 
   parte('Rotas e telas');
   await todasAsRotas('com dados');
