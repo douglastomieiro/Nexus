@@ -1,0 +1,6 @@
+#!/bin/sh
+# Antes de cada commit: roda os testes (em modo simulado, sem rede e numa pasta temporária) se o commit mexe no sistema.
+# Se algum falhar, o commit não entra. Para ligar neste clone: git config core.hooksPath .githooks
+git diff --cached --name-only | grep -qE '^(server|web|test|broker|site)/|^package(-lock)?\.json$' || exit 0
+echo "Rodando os testes antes do commit..."
+npm test --silent || { echo "Testes falharam: commit cancelado."; exit 1; }
