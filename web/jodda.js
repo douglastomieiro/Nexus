@@ -35,6 +35,17 @@ Object.assign(SUB, {
 
 // ───────── helpers ─────────
 const ic = (k, s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICO[k] || ''}</svg>`;
+// copia para a área de transferência; aberto pelo IP da rede (http, sem https) o navegador não dá navigator.clipboard,
+// então cai no método antigo (textarea + execCommand). Devolve se copiou de verdade.
+const copiar = async texto => {
+  try { if (window.isSecureContext && navigator.clipboard) { await navigator.clipboard.writeText(texto); return true; } } catch { /* tenta o método antigo */ }
+  const ta = document.createElement('textarea'); ta.value = texto; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:-1000px;left:0;opacity:0';
+  document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch { /* sem cópia */ } ta.remove(); return ok;
+};
+window.copiar = copiar;
+// botão de copiar: mostra se copiou (ou que não deu) e volta ao texto original depois de 2 s
+const botaoCopiar = (bt, texto) => copiar(texto).then(ok => { const ant = bt.dataset.txt ||= bt.innerHTML; bt.innerHTML = ic('copy', 13) + (ok ? 'Copiado ✓' : 'Não copiou: selecione e use Ctrl+C');
+  clearTimeout(bt._t); bt._t = setTimeout(() => (bt.innerHTML = ant), ok ? 2000 : 5000); });
 const pc = (n, d = 1) => n == null || !isFinite(n) ? '—' : (n * 100).toFixed(d).replace('.', ',') + '%';
 const dlt = v => v == null || !isFinite(v) ? '' : `<span class="dl ${v >= 0 ? 'up' : 'dn'}">${v >= 0 ? '+' : ''}${(v * 100).toFixed(1).replace('.', ',')}%</span>`;
 const dpp = (a, b) => a == null || b == null || !isFinite(a - b) ? '' : `<span class="dl ${a - b >= 0 ? 'up' : 'dn'}">${a - b >= 0 ? '+' : ''}${((a - b) * 100).toFixed(1).replace('.', ',')} p.p.</span>`;
@@ -279,7 +290,7 @@ VIEWS.abc = async function () {
         <div class="xb"><h5>Publicidade (Ads)</h5><div class="xl"><span>Gasto com Ads</span><b>${brl(x.ads)}</b></div><div class="xl"><span>% do faturamento</span><b>${pc(pAds)}</b></div><div class="xl"><span>Lucro pós Ads</span><b>${brl(x.lucro)}</b></div><div class="xl"><span>Custo unitário</span><b>${x.custoUnit == null ? '<span class="warn">sem custo</span>' : brl(x.custoUnit)}</b></div></div>
         <div class="xb"><h5>Recompra</h5><div class="xl"><span>Decisão</span><b>${DEC[x.dec][0]}</b></div><div class="xl"><span>Por quê</span><b style="white-space:normal;text-align:right">${esc(x.decMotivo)}</b></div><div class="xl"><span>Média de venda</span><b>${d2(x.md)} por dia</b></div><div class="xl"><span>Últimos 30 dias</span><b>${num(x.unidades30)} un.</b></div><div class="xl"><span>Estoque (próprio + Full)</span><b>${num(x.estoqueProprio || 0)} + ${num(x.estoqueFull || 0)}</b></div><div class="xl"><span>Comprar</span><b>${x.comprar ? num(x.comprar) + ' un.' + (x.valorCompra ? ' · ' + brl(x.valorCompra) : '') : '—'}</b></div></div>
         <div class="xa"><a class="btn-ref" href="#sku:${encodeURIComponent(x.sku)}" style="text-decoration:none;justify-content:center;border-radius:8px;padding:8px 12px;background:var(--ac);color:#fff;font-weight:600;font-size:12.5px">${ic('sku', 13)} Analisar SKU</a><button class="btn2" data-a="sku">${ic('copy', 13)}Copiar SKU</button><a class="btn2" href="#custos" style="text-decoration:none">${ic('custos', 13)}Editar custo</a><a class="btn2" target="_blank" rel="noopener" href="${mlUrl('item', x.item)}" style="text-decoration:none">${ic('ext', 13)}Abrir no ML</a></div></div></td></tr>`);
-      tr.nextElementSibling.querySelector('[data-a=sku]').onclick = e => { navigator.clipboard?.writeText(x.sku); e.currentTarget.innerHTML = ic('copy', 13) + 'Copiado ✓'; };
+      tr.nextElementSibling.querySelector('[data-a=sku]').onclick = e => botaoCopiar(e.currentTarget, x.sku);
     });
   };
   const ler = () => { f.q = $('#aq').value.toLowerCase().trim(); f.tend = $('#at').value; f.sinal = $('#as').value; f.classe = $('#ac').value; f.loja = $('#al').value; f.dec = $('#ad').value; f.max = 100; draw(); };
@@ -324,7 +335,7 @@ VIEWS.sku = async function (arg) {
       { t: 'Comissão e taxas', n: 1, f: r => brl(r.comissao + (r.ajustes || 0)) }, { t: 'Frete pago', n: 1, f: r => `${brl(r.frete)}${(r.flags || []).includes('frete estimado') ? '<br><small class="warn">estimado</small>' : ''}` }, { t: 'Frete na nota', n: 1, f: r => r.freteNF ? brl(r.freteNF) : '—' }, { t: 'Imposto', n: 1, f: r => brl(r.imposto) }, { t: 'Custo', n: 1, f: r => r.custo ? brl(r.custo) : '<span class="warn">sem custo</span>' }, { t: 'Ads', n: 1, f: r => r.ads ? brl(r.ads) : '—' },
       { t: 'Resultado', n: 1, f: r => `<b class="${r.lucro < 0 ? 'bad' : 'ok'}">${brl(r.lucro)}</b>` }, { t: 'Margem', n: 1, f: r => mgPill(r.margem, S.semCusto) }, { t: 'Nº pedido', f: r => `<a class="oid" href="#" data-ficha="${r.loja}|${r.pedido}" title="Ver a ficha completa do pedido">${r.pedido}</a>` }], S.pedidos)}</div>`;
   $('#sa').onclick = ir; $('#sq').onkeydown = e => { if (e.key === 'Enter') ir(); };
-  $('#scp').onclick = e => { navigator.clipboard?.writeText(S.sku); e.currentTarget.innerHTML = ic('copy', 13) + 'Copiado ✓'; };
+  $('#scp').onclick = e => botaoCopiar(e.currentTarget, S.sku);
   const dd = S.diario;
   mk('#sk1', { type: 'bar', data: { labels: dd.map(x => ddmm(x.dia)), datasets: [{ type: 'line', label: 'Unidades', data: dd.map(x => x.unidades), borderColor: '#22c55e', backgroundColor: '#22c55e', yAxisID: 'y2', tension: .3, pointRadius: 2, borderWidth: 2 }, { label: 'Faturamento', data: dd.map(x => x.receita), backgroundColor: '#3b82f6', yAxisID: 'y' }] },
     options: { ...ch, interaction: { mode: 'index', intersect: false }, scales: { x: { ...ch.scales.x, grid: { display: false } }, y: ch.scales.y, y2: { position: 'right', ticks: { color: '#16a34a' }, grid: { display: false } } } } });
