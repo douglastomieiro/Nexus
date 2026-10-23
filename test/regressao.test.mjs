@@ -3,7 +3,8 @@
 // Confere o cálculo do lucro, as telas da central (Vendas, Anúncios, Ads, Atendimento, Resumo), cada ação pelo Histórico de ações,
 // Personalizar (módulos, regras, perfis), que nenhuma rota GET quebra (com dados e com o banco vazio) e que os scripts das telas abrem.
 // O mesmo arquivo serve às duas versões: a pública aceita a pasta de dados à parte (ML_DASH_DATA); a pessoal guarda os dados na pasta
-// do programa, então o teste roda uma CÓPIA do código numa pasta temporária (test/.tmp-*) e nunca abre o banco nem o .env de verdade.
+// do programa, então o teste roda uma CÓPIA do código numa pasta temporária do sistema e nunca abre o banco nem o .env de verdade.
+// A pasta temporária fica FORA do projeto: a pasta da pessoal é espelhada no servidor .254 pelo FreeFileSync.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,8 +15,8 @@ import Database from 'better-sqlite3';
 
 const PROJ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PESSOAL = !fs.existsSync(path.join(PROJ, 'server', 'contas.js')); // versão pessoal: contas fixas no .env, sem pasta de dados à parte
-// na pessoal a cópia fica dentro do projeto, para achar o node_modules dele subindo as pastas
-const TMP = fs.mkdtempSync(PESSOAL ? path.join(PROJ, 'test', '.tmp-') : path.join(os.tmpdir(), 'nexus-regressao-'));
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-regressao-'));
+const ligacoes = []; // node_modules da cópia (pessoal) aponta para o do projeto; sai antes de apagar a pasta temporária
 let falhas = 0;
 const ok = (c, m, extra) => { console.log(`${c ? 'OK  ' : 'FALHA'} ${m}${!c && extra !== undefined ? ` → ${JSON.stringify(extra).slice(0, 300)}` : ''}`); if (!c) falhas++; };
 const perto = (a, b) => typeof a === 'number' && Math.abs(a - b) < 0.011;
@@ -142,7 +143,11 @@ const SEM_REDE = pathToFileURL(path.join(PROJ, 'test', 'sem-rede.mjs')).href;
 async function sobe(pasta) {
   const porta = 4300 + Math.floor(Math.random() * 600), rede = path.join(pasta, 'rede.log');
   // pessoal: o programa roda da cópia (dados e .env dela); nunca da pasta do projeto
-  if (PESSOAL) { for (const d of ['server', 'web']) fs.cpSync(path.join(PROJ, d), path.join(pasta, d), { recursive: true }); fs.copyFileSync(path.join(PROJ, 'package.json'), path.join(pasta, 'package.json')); }
+  if (PESSOAL) {
+    for (const d of ['server', 'web']) fs.cpSync(path.join(PROJ, d), path.join(pasta, d), { recursive: true });
+    fs.copyFileSync(path.join(PROJ, 'package.json'), path.join(pasta, 'package.json'));
+    const nm = path.join(pasta, 'node_modules'); fs.symlinkSync(path.join(PROJ, 'node_modules'), nm, 'junction'); ligacoes.push(nm);
+  }
   const cwd = PESSOAL ? pasta : PROJ;
   if (path.resolve(cwd) === path.resolve(PROJ) && PESSOAL) throw new Error('a versão pessoal só roda no teste a partir da cópia');
   const env = { ...process.env, ML_DASH_DATA: pasta, PORT: String(porta), HOST: '127.0.0.1', SEM_COLETA: '1', ML_ACOES_SIMULADAS: '1', SEM_REDE_LOG: rede, ML_DASH_BROKER: 'http://127.0.0.1:9' };
@@ -376,6 +381,7 @@ const ruins = [];
 for (const s of srcs) { const f = path.join(PROJ, 'web', s); if (!fs.existsSync(f)) { ruins.push(`${s}: não existe`); continue; } try { new vm.Script(fs.readFileSync(f, 'utf8'), { filename: s }); } catch (e) { ruins.push(`${s}: ${e.message}`); } }
 ok(srcs.length > 5 && !ruins.length, `os ${srcs.length} scripts das telas abrem sem erro de sintaxe`, ruins);
 
+for (const l of ligacoes) fs.unlinkSync(l); // tira só a ligação, nunca o node_modules do projeto
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(falhas ? `\n${falhas} FALHA(S)` : '\nTudo certo.');
 process.exitCode = falhas ? 1 : 0;
