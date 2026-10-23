@@ -18,7 +18,7 @@ O app só abre conexão com estes destinos:
 
 | Destino | Para quê | O que é enviado |
 |---|---|---|
-| **Mercado Livre** (`api.mercadolibre.com`) e **Mercado Pago** (`api.mercadopago.com`) | Baixar os dados da sua loja e, na tela Descontos, aplicar ou desativar promoções quando você mandar | As requisições normais da API, usando a autorização que você deu |
+| **Mercado Livre** (`api.mercadolibre.com`) e **Mercado Pago** (`api.mercadopago.com`) | Baixar os dados da sua loja e fazer as alterações que você mandar nas telas (responder perguntas e mensagens, reclamações, etiquetas, NF-e, anúncios, Ads, descontos). Cada alteração fica em Configurações › Histórico de ações | As requisições normais da API, usando a autorização que você deu |
 | **Intermediário de login** (Cloudflare Worker, código em `broker/`) | Conectar e renovar o acesso da sua conta | Veja a seção abaixo |
 | **GitHub** (`github.com`, Releases) | Procurar e baixar novas versões do app | Uma consulta de versão. O GitHub pode registrar o seu IP, como em qualquer site |
 
@@ -64,7 +64,7 @@ Limite honesto: quem tem acesso à sua conta de usuário do Windows (por exemplo
 Como não recebemos nenhum dado seu ou dos seus clientes, não somos controladores nem operadores desses dados. Os dados dos compradores que o Mercado Livre entrega ao app (por exemplo, nome e cidade em um pedido) ficam apenas no seu computador, e você é quem responde por eles perante a LGPD. Recomendamos não copiar nem compartilhar a pasta de dados.
 
 ## Pedidos de ajuda e dúvidas
-Abra uma [issue](https://github.com/douglastomieiro/NEXUS_/issues). **Nunca** cole tokens, senhas ou dados da sua loja ao relatar um problema.
+Abra uma [issue](https://github.com/douglastomieiro/Nexus/issues). **Nunca** cole tokens, senhas ou dados da sua loja ao relatar um problema.
 
 Se encontrar uma falha de segurança, avise em particular pelo recurso de aviso de vulnerabilidade do GitHub (aba *Security* do repositório) antes de divulgar.
 

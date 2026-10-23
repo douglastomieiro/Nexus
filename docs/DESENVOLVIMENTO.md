@@ -64,8 +64,17 @@ Os custos digitados à mão não podem ser recoletados da API, então são salvo
 - Se a tabela de custos estiver vazia ao iniciar e houver backup, ele é **restaurado sozinho**. Um backup com custos nunca é trocado por um vazio.
 - Manual: `node scripts/backup-custos.mjs` (faz backup) · `node scripts/backup-custos.mjs --restaurar [arquivo.json] [--forcar]`.
 
+## Testes
+`npm test` roda os dois testes em `test/` (cerca de 10 s, sem rede e sem tocar nos seus dados):
+- `login.test.mjs` — login de ponta a ponta com um Mercado Livre simulado e o intermediário rodando no Node.
+- `regressao.test.mjs` — sobe o servidor numa pasta temporária com duas contas inventadas, no modo simulado (`ML_ACOES_SIMULADAS=1`: nenhuma ação vai ao ML) e com `test/sem-rede.mjs` barrando qualquer chamada para fora. Confere valores exatos do lucro, as telas da central, cada ação pelo Histórico de ações, Personalizar e perfis, todas as rotas GET (com dados e com o banco vazio), erros no log do servidor e a sintaxe dos scripts de `web/`.
+
+Rodam sozinhos antes de cada commit que mexe no sistema e antes de cada push (`git config core.hooksPath .githooks`), e no GitHub o site só é publicado se passarem. Tela ou ação nova: acrescente a conferência dela em `regressao.test.mjs`.
+
 ## Estrutura
 - `server/` — `index.js` (API e site), `collectors.js` (coleta ML), `margem.js` (motor de lucro, DRE, imposto), `analises.js` (alertas e margem das promoções), `painel.js` (telas do Dashboard), `sync.js` (agendador), `ml.js` (cliente ML + contas), `db.js` (SQLite), `shopee*.js` (cliente, coleta, motor e rotas da Shopee), `descontos/` (tela Descontos).
-- `web/` — `index.html` (base, menu, telas originais), `extra.js`, `jodda.js|css`, `shopee.js`, `descontos.js|css`.
+- Central do vendedor em `server/`: `acoes.js` (porta única das alterações no ML, com o Histórico de ações), `resumo.js`, `atendimento.js`, `vendas.js`, `pedido.js` (ficha da venda e Ao vivo), `anuncios.js`, `publicidade.js` e `preferencias.js` (módulos, Minhas regras e perfis).
+- `web/` — `index.html` (base, menu, telas originais), `extra.js`, `jodda.js|css`, `shopee.js`, `descontos.js|css` e uma tela por arquivo da central (`resumo.js`, `atendimento.js`, `vendas-lista.js`, `vendas.js`, `anuncios.js`, `publicidade.js`, `acoes.js`, `preferencias.js`, `colunas.js`).
+- `test/` — testes (veja acima).
 - `scripts/` — ferramentas de diagnóstico (`00-check.mjs` confere os tokens; `02-probe.mjs` e `03-report.mjs` testam a cobertura da API; `08-shopee-probe.mjs` sonda a Shopee).
 - `data/ml.db` — resposta crua de cada endpoint (recurso, chave). Falha nunca sobrescreve dado bom.
