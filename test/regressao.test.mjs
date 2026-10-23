@@ -184,8 +184,15 @@ const DADOS = path.join(TMP, 'dados'); semear(DADOS);
 S = await sobe(DADOS);
 try {
   parte('Lucro real');
+  // primeiros passos: com conta e pedidos coletados, faltam alíquota, custos e Minhas regras
+  const passo = (P, id) => P.passos.find(p => p.id === id);
+  let pp = await get('/api/primeiros-passos');
+  ok(pp.total === 5 && pp.passos.filter(p => p.feito).map(p => p.id).join() === 'contas,coleta', 'primeiros passos: conta e pedidos feitos; faltam alíquota, custos e regras', pp.passos);
   ok((await api('/api/custos', { corpo: [{ sku: 'SKU-A', custo: 40 }, { sku: 'SKU-C38', custo: 90 }, { sku: 'SKU-C39', custo: 90 }, { sku: 'SKU-D', custo: 30 }] })).status === 200, 'grava os custos dos SKUs');
   ok((await api('/api/config', { corpo: { aliquota_loja1: 10, aliquota_loja2: 6 } })).status === 200, 'grava a alíquota de cada conta');
+  pp = await get('/api/primeiros-passos');
+  // SKU-B (sem custo) é 50 de 900 vendidos em 90 dias: 6%, acima do limite de 5%
+  ok(passo(pp, 'aliquota').feito && !passo(pp, 'custos').feito && /1 de 5 SKUs.*6%/.test(passo(pp, 'custos').detalhe), 'primeiros passos: alíquota feita; custos ainda não (1 SKU sem custo, 6% do faturamento)', pp.passos);
   const lojas = await get('/api/lojas');
   ok(Object.keys(lojas).join() === 'loja1,loja2', 'duas contas de exemplo', lojas);
   const lucro = await get('/api/lucro?dias=30'), ped = id => lucro.pedidos.find(p => String(p.id) === id);
@@ -337,6 +344,9 @@ try {
   parte('Personalizar');
   ok((await api('/api/prefs/regras', { corpo: { margemMin: 25, coberturaDias: 30, estoqueMinDias: 7, qualidadeMin: 30, respostaMin: 60 } })).status === 200, 'grava Minhas regras');
   ok((await get('/api/prefs')).regras.margemMin === 25, 'regras novas valem para as telas');
+  pp = await get('/api/primeiros-passos');
+  ok(pp.feitos === 4 && passo(pp, 'regras').feito && !pp.oculto, 'primeiros passos: Minhas regras salvas marca o passo', pp.passos);
+  ok((await api('/api/primeiros-passos', { corpo: { oculto: true } })).j.oculto === true && (await get('/api/primeiros-passos')).oculto, 'primeiros passos: esconder fica guardado');
   ok((await get('/api/anuncios/lista')).cards.qualidade === 0, 'qualidade mínima nova muda o cartão de anúncios');
   ok((await api('/api/prefs/regras', { corpo: { margemMin: 200, coberturaDias: 30, estoqueMinDias: 7, qualidadeMin: 60, respostaMin: 60 } })).status === 400, 'regra fora do permitido é recusada');
   ok((await api('/api/prefs/modulos', { corpo: { ads: false, atendimento: false } })).status === 200, 'desliga os módulos de Ads e Atendimento');
@@ -383,6 +393,17 @@ const html = fs.readFileSync(path.join(PROJ, 'web', 'index.html'), 'utf8'), srcs
 const ruins = [];
 for (const s of srcs) { const f = path.join(PROJ, 'web', s); if (!fs.existsSync(f)) { ruins.push(`${s}: não existe`); continue; } try { new vm.Script(fs.readFileSync(f, 'utf8'), { filename: s }); } catch (e) { ruins.push(`${s}: ${e.message}`); } }
 ok(srcs.length > 5 && !ruins.length, `os ${srcs.length} scripts das telas abrem sem erro de sintaxe`, ruins);
+
+// toda tela tem explicação no botão "?" e no Manual (web/ajuda.js): as telas são lidas do código (VIEWS.x = …, const VIEWS = {…}, Object.assign(VIEWS, {…}))
+const telas = new Set(), web = path.join(PROJ, 'web');
+for (const f of fs.readdirSync(web).filter(f => /\.(js|html)$/.test(f) && srcs.concat('index.html').includes(f))) {
+  const s = fs.readFileSync(path.join(web, f), 'utf8');
+  for (const m of s.matchAll(/\bVIEWS2?\.(\w+)\s*=(?!=)/g)) telas.add(m[1]);
+  for (const b of s.matchAll(/(?:const VIEWS2? = \{|Object\.assign\(VIEWS2?, \{)([\s\S]*?)\n\}\)?;/g)) for (const m of b[1].matchAll(/^  (?:async )?(\w+)(?::\s*(?:async)?\s*(?:function)?\s*\(|\s*\()/gm)) telas.add(m[1]);
+}
+const ajudaJs = fs.readFileSync(path.join(web, 'ajuda.js'), 'utf8'), comAjuda = new Set([...ajudaJs.matchAll(/^    (\w+): \{ o: '[^']{20,}/gm)].map(m => m[1]));
+const semAjuda = [...telas].filter(t => !comAjuda.has(t));
+ok(telas.size > 30 && !semAjuda.length, `as ${telas.size} telas têm explicação no Manual e no botão "?"`, semAjuda);
 
 for (const l of ligacoes) fs.unlinkSync(l); // tira só a ligação, nunca o node_modules do projeto
 fs.rmSync(TMP, { recursive: true, force: true });

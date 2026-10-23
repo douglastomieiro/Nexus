@@ -2,7 +2,7 @@
 // a reputação de cada conta com o que pesou nela, vendas e lucro da semana, visitas e conversão, desempenho de envios e a fatura do ML.
 import { db, getRaw } from './db.js';
 import { LOJAS } from './ml.js';
-import { calcular } from './margem.js';
+import { calcular, listarSkus, aliquotaPctFn } from './margem.js';
 import { hoje, addDias, diaBR, r2 } from './painel.js';
 import { notificacoes } from './notificacoes.js';
 import { cartoesVendas } from './vendas.js';
@@ -71,8 +71,31 @@ function resumo(lojas) {
   cache = { k, t: Date.now(), v }; return v;
 }
 
+// Primeiros passos: o que falta para o lucro sair certo (conta conectada, primeira carga, alíquota, custos, Minhas regras).
+// Cada passo se marca sozinho pelo estado do sistema; "esconder" fica guardado na config (vale para todos os navegadores).
+const lerCfg = k => { try { return JSON.parse(db.prepare('SELECT valor FROM config WHERE chave=?').get(k)?.valor ?? 'null'); } catch { return null; } };
+function primeirosPassos() {
+  const lojas = Object.keys(LOJAS), n = x => x.toLocaleString('pt-BR'), mes = hoje().slice(0, 7);
+  const pedidos = lojas.length ? db.prepare(`SELECT count(*) n FROM raw WHERE recurso='order' AND status=200 AND loja IN (${lojas.map(() => '?').join(',')})`).get(...lojas).n : 0;
+  // a mesma regra do cálculo do lucro: alíquota automática (quando existe) ou a informada em Configurações
+  const semAliq = lojas.filter(l => !(aliquotaPctFn(l)(mes) > 0)).map(l => LOJAS[l].nome);
+  // custos: SKUs vendidos nos últimos 90 dias; pronto quando os sem custo somam menos de 5% do faturamento
+  const skus = lojas.length ? listarSkus(lojas, addDias(hoje(), -89)) : [], tot = skus.reduce((t, s) => t + s.receita, 0), sem = skus.filter(s => s.custo == null), pctSem = tot ? sem.reduce((t, s) => t + s.receita, 0) / tot : 0;
+  const passos = [
+    { id: 'contas', titulo: 'Conectar a conta do Mercado Livre', feito: lojas.length > 0, detalhe: lojas.length ? `${lojas.length} conta(s) conectada(s)` : 'Em Configurações › Contas, autorize o acesso pela página oficial do Mercado Livre.' },
+    { id: 'coleta', titulo: 'Primeira carga de pedidos', feito: pedidos > 0, detalhe: pedidos ? `${n(pedidos)} pedidos coletados` : 'Começa sozinha depois de conectar a conta (12 meses podem levar algumas dezenas de minutos).' },
+    { id: 'aliquota', titulo: 'Informar a alíquota do Simples', feito: lojas.length > 0 && !semAliq.length, detalhe: !lojas.length ? 'Depois de conectar a conta, informe em Configurações a alíquota do Simples de cada conta.' : semAliq.length ? `Falta em: ${semAliq.join(', ')}. Sem ela, o imposto conta zero.` : 'Imposto definido em todas as contas.' },
+    { id: 'custos', titulo: 'Cadastrar o custo dos produtos', feito: skus.length > 0 && pctSem < 0.05,
+      detalhe: !skus.length ? 'Os produtos aparecem em Custos depois da primeira carga de pedidos.' : sem.length ? `${n(sem.length)} de ${n(skus.length)} SKUs vendidos em 90 dias sem custo (${pctSem > 0 && pctSem < 0.01 ? 'menos de 1%' : Math.round(pctSem * 100) + '%'} do faturamento). Dá para colar SKU;custo em lote.` : 'Todos os SKUs vendidos em 90 dias têm custo.' },
+    { id: 'regras', titulo: 'Conferir Minhas regras', feito: !!lerCfg('central_regras'), detalhe: 'Margem mínima, cobertura de estoque, ACOS máximo e prazo de resposta usados em todas as telas (em Personalizar).' },
+  ];
+  return { passos, feitos: passos.filter(p => p.feito).length, total: passos.length, oculto: !!lerCfg('primeiros_passos')?.oculto };
+}
+
 export function registrarResumo(app, { H, lojasSel }) {
   app.get('/api/central', H(q => resumo(lojasSel(q).filter(l => LOJAS[l]))));
+  app.get('/api/primeiros-passos', H(() => primeirosPassos()));
+  app.post('/api/primeiros-passos', H((_, req) => { db.prepare('INSERT INTO config (chave,valor) VALUES (?,?) ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor').run('primeiros_passos', JSON.stringify({ oculto: !!req.body?.oculto })); return primeirosPassos(); }));
   // deixa as contas prontas pouco depois de o servidor subir: a primeira abertura do Resumo não espera o cálculo
   setTimeout(() => seguro(() => resumo(lojasSel({}).filter(l => LOJAS[l])), null), 20e3);
 }
