@@ -1,0 +1,5 @@
+#!/bin/sh
+# Antes de cada push: roda os testes (login e regressão, em modo simulado, sem rede e numa pasta temporária).
+# Se algum falhar, o push não sai. Para ligar neste clone: git config core.hooksPath .githooks
+echo "Rodando os testes antes do push..."
+npm test --silent || { echo "Testes falharam: push cancelado."; exit 1; }

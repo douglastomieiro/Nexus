@@ -9,7 +9,7 @@ name: Publicar site
 on:
   push:
     branches: [main]
-    paths: ['web/**', 'server/**', 'site/**', 'package.json', 'package-lock.json', '.github/workflows/site.yml']
+    paths: ['web/**', 'server/**', 'site/**', 'test/**', 'broker/**', 'package.json', 'package-lock.json', '.github/workflows/site.yml']
   workflow_dispatch:
 
 permissions:
@@ -22,7 +22,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # testes (login e regressão, em modo simulado e sem rede): o site só é publicado se passarem
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      # com os scripts de instalação (o SQLite nativo do servidor), mas sem baixar o Electron
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+      - run: npm test
+
   publicar:
+    needs: testes
     runs-on: ubuntu-latest
     environment:
       name: github-pages

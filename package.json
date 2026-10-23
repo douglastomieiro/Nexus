@@ -13,7 +13,8 @@
   "main": "desktop/main.js",
   "scripts": {
     "start": "node start.js",
-    "test": "node test/login.test.mjs",
+    "test": "node test/login.test.mjs && node test/regressao.test.mjs",
+    "test:regressao": "node test/regressao.test.mjs",
     "app": "electron .",
     "pack": "electron-builder --win dir",
     "dist": "electron-builder --win nsis --publish never",

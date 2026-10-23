@@ -35,3 +35,6 @@ dist-*/
 
 # Configuração de quem gera o instalador (endereço do intermediário): fica fora do git
 app-config.json
+
+# Cópias temporárias do teste de regressão
+test/.tmp-*/
